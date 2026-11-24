@@ -1,0 +1,20 @@
+/* Whoprrr brand tokens. Mirrors Sources/Whopper/Shell/Brand.swift. */
+:root {
+  --whoprrr-violet: #5B2BD8;
+  --whoprrr-violet-bright: #7C4DFF;
+  --whoprrr-violet-deep: #221060;
+  --whoprrr-bun: #FFC857;
+  --whoprrr-seed: #FFF0B8;
+  --whoprrr-patty: #FF4F81;
+  --whoprrr-signal-red: #FF3B4A;
+  --whoprrr-signal-green: #2EE66B;
+  --whoprrr-signal-blue: #4DA3FF;
+  --whoprrr-good: #1FB955;
+  --whoprrr-accent-on-dark: #A98BFF;
+  --whoprrr-warn: #E08A00;
+  --whoprrr-ink: #1D1B19;
+  --whoprrr-paper: #F4F2EE;
+  --whoprrr-font-display: ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  --whoprrr-font-text: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --whoprrr-font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
