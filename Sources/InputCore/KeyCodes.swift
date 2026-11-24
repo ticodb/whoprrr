@@ -1,13 +1,13 @@
 import Foundation
 import Carbon.HIToolbox
 
-/// Finds which physical key types a character on the *current* keyboard layout, so "⌘[" means ⌘ and the bracket key on a US,
-/// Dvorak or AZERTY keyboard alike. Falls back to the US position when the layout cannot type the character without modifiers.
+/// Finds which physical key produces a character *while ⌘ is held* on the current keyboard layout, which is how apps match
+/// keyboard shortcuts. On a US keyboard "[" is the key right of P; on a Spanish ISO layout ⌘[ is the Ñ key (the layout has a
+/// separate Command mapping); Dvorak and AZERTY differ again. A shortcut sent by character therefore lands on the right key.
 public enum KeyCodes {
     public static func code(for ch: Character, fallback: Int) -> Int { exactCode(for: ch) ?? fallback }
 
-    /// The key that types `ch` with no modifiers on the current layout, or nil if there is none (brackets on a Spanish layout
-    /// need Option, so a shortcut like ⌘[ cannot be sent as "⌘ + a key" there).
+    /// The key that produces `ch` under ⌘ on the current layout, or nil if no key does.
     public static func exactCode(for ch: Character) -> Int? {
         guard let src = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
               let ptr = TISGetInputSourceProperty(src, kTISPropertyUnicodeKeyLayoutData) else { return nil }
@@ -18,7 +18,7 @@ public enum KeyCodes {
             for code in 0..<128 {
                 var dead: UInt32 = 0, length = 0
                 var chars = [UniChar](repeating: 0, count: 4)
-                let st = UCKeyTranslate(layout, UInt16(code), UInt16(kUCKeyActionDown), 0, UInt32(LMGetKbdType()), OptionBits(kUCKeyTranslateNoDeadKeysBit),
+                let st = UCKeyTranslate(layout, UInt16(code), UInt16(kUCKeyActionDown), UInt32(cmdKey >> 8), UInt32(LMGetKbdType()), OptionBits(kUCKeyTranslateNoDeadKeysBit),
                                         &dead, 4, &length, &chars)
                 if st == noErr, length == 1, String(utf16CodeUnits: chars, count: 1).lowercased() == target { return code }
             }

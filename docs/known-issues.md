@@ -8,7 +8,7 @@
 - Keys typed into password fields and at the login window cannot be remapped (macOS rule).
 - Rules can be limited to a keyboard layout class (ANSI, ISO, JIS) or to a keyboard type learned from a key press. Two keyboards that report the same type cannot be told apart.
 - Logitech: buttons are named for the controls whose IDs are well established; others show their hex ID. Use **Learn a button**.
-- Shortcuts sent by actions such as Back and Forward depend on the keyboard layout: ⌘[ and ⌘] where the layout types those keys directly, ⌘← and ⌘→ otherwise (Spanish layouts). Apps that only accept ⌘[ may ignore the fallback.
+- Back, Forward, previous/next tab: Whoprrr presses the frontmost app's own menu item for that shortcut (needs Accessibility). If the app has no such item it sends a key shortcut instead, which depends on the keyboard layout and may not work in every app. Safari ignores the mouse's native side buttons, so Whoprrr's default Back/Forward rules matter there.
 - Quit Logi Options+ and Karabiner-Elements when you use the same buttons or keys in Whoprrr.
 
 ## Audio

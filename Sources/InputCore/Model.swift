@@ -229,17 +229,25 @@ public struct InputSettings: Codable, Equatable, Sendable {
         defaultsVersion = try c.decodeIfPresent(Int.self, forKey: .defaultsVersion) ?? 0
     }
 
-    public static let currentDefaultsVersion = 2
+    public static let currentDefaultsVersion = 3
 
-    /// Version 1 added Back/Forward rules for the mouse's side buttons. They did more harm than good: apps already handle those
-    /// buttons natively, and a keyboard shortcut sent in their place depends on the keyboard layout (on a Spanish layout the
-    /// "]" key position types "+", so Forward zoomed in). Remove exactly the rules version 1 added; keep anything the user made.
+    /// Built-in rules, applied once per version so a rule the user deletes does not come back.
+    /// - v1 added Back/Forward rules for the mouse side buttons that sent ⌘[ / ⌘] as key codes. On a Spanish layout those key
+    ///   positions type "+" and a dead key, so Forward zoomed in. v2 removed them.
+    /// - v3 adds Back/Forward rules again, now backed by an action that presses the app's own Back/Forward menu item (layout
+    ///   independent). Safari does not react to the mouse's native side buttons, so without a rule they do nothing useful there.
+    /// Rules the user made for those buttons are never touched.
     public mutating func applyDefaults() {
         guard defaultsVersion < Self.currentDefaultsVersion else { return }
-        rules.removeAll { r in
-            (r.name == "Back button → Back" && r.trigger == .mouse(3) && r.tap == .command("common.back")) ||
-            (r.name == "Forward button → Forward" && r.trigger == .mouse(4) && r.tap == .command("common.forward"))
+        if defaultsVersion < 2 {
+            rules.removeAll { r in
+                (r.name == "Back button → Back" && r.trigger == .mouse(3) && r.tap == .command("common.back")) ||
+                (r.name == "Forward button → Forward" && r.trigger == .mouse(4) && r.tap == .command("common.forward"))
+            }
         }
+        func has(_ b: Int) -> Bool { rules.contains { $0.trigger == .mouse(b) || $0.trigger == .logi(b == 3 ? 0x53 : 0x56) } }
+        if !has(3) { rules.append(Rule(name: "Back button → Back", trigger: .mouse(3), tap: .command("common.back"))) }
+        if !has(4) { rules.append(Rule(name: "Forward button → Forward", trigger: .mouse(4), tap: .command("common.forward"))) }
         defaultsVersion = Self.currentDefaultsVersion
     }
 }

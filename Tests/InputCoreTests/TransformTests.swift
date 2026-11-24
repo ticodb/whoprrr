@@ -141,28 +141,43 @@ final class TransformTests: XCTestCase {
 }
 
 final class DefaultsTests: XCTestCase {
-    func testSideButtonsAreLeftToMacOSByDefault() {
+    func testSideButtonsGetBackAndForwardRulesOnce() {
         var s = InputSettings(); s.applyDefaults()
-        XCTAssertTrue(s.rules.isEmpty)                 // no Back/Forward rules: apps handle those buttons themselves
+        XCTAssertEqual(s.rules.map(\.trigger), [.mouse(3), .mouse(4)])
+        XCTAssertEqual(s.rules.map(\.tap), [.command("common.back"), .command("common.forward")])
+        s.rules.removeAll(); s.applyDefaults()
+        XCTAssertTrue(s.rules.isEmpty)                         // a rule the user deleted stays deleted
         XCTAssertEqual(s.defaultsVersion, InputSettings.currentDefaultsVersion)
-        let e = RemapEngine(rules: s.rules)
-        XCTAssertTrue(e.handle(InputEvent(.down, .mouse(3), mods: [], bundle: nil, time: 0)).isPlainPass)
-        XCTAssertTrue(e.handle(InputEvent(.down, .mouse(4), mods: [], bundle: nil, time: 0)).isPlainPass)
     }
 
-    func testRulesAddedByTheFirstDefaultsAreRemovedButUserRulesStay() {
-        var s = InputSettings()
-        s.defaultsVersion = 1
-        s.rules = [
-            Rule(name: "Back button → Back", trigger: .mouse(3), tap: .command("common.back")),
-            Rule(name: "Forward button → Forward", trigger: .mouse(4), tap: .command("common.forward")),
-            Rule(name: "Back button", trigger: .mouse(3), tap: .command("common.back"), scope: Scope(mode: .only, bundleIDs: ["com.apple.finder"])),   // the user's own
-            Rule(name: "Other", trigger: .key(0), tap: .nothing),
-        ]
+    func testUpgradeFromVersionTwoReAddsThemAndKeepsUserRules() {
+        var s = InputSettings(); s.defaultsVersion = 2
+        s.rules = [Rule(name: "Other", trigger: .key(0), tap: .nothing)]
         s.applyDefaults()
-        XCTAssertEqual(s.rules.map(\.name), ["Back button", "Other"])
+        XCTAssertEqual(s.rules.map(\.name), ["Other", "Back button → Back", "Forward button → Forward"])
+    }
+
+    func testUserRulesForThoseButtonsAreRespected() {
+        var s = InputSettings()
+        s.rules = [Rule(name: "Back button", trigger: .mouse(3), tap: .chord(Chord(0)), scope: Scope(mode: .only, bundleIDs: ["com.apple.finder"])),
+                   Rule(trigger: .logi(0x56), tap: .nothing)]
         s.applyDefaults()
         XCTAssertEqual(s.rules.count, 2)
+    }
+
+    func testVersionOneRulesAreReplacedNotDuplicated() {
+        var s = InputSettings(); s.defaultsVersion = 1
+        s.rules = [Rule(name: "Back button → Back", trigger: .mouse(3), tap: .command("common.back")),
+                   Rule(name: "Forward button → Forward", trigger: .mouse(4), tap: .command("common.forward"))]
+        s.applyDefaults()
+        XCTAssertEqual(s.rules.count, 2)
+    }
+
+    func testBackButtonRunsTheBackCommand() {
+        var s = InputSettings(); s.applyDefaults()
+        let e = RemapEngine(rules: s.rules)
+        let d = e.handle(InputEvent(.down, .mouse(3), mods: [], bundle: "com.apple.Safari", time: 0))
+        XCTAssertEqual(d.emits, [.command("common.back")]); XCTAssertTrue(d.swallow)
     }
 
     func testSettingsSavedBeforeDefaultsExistedStillLoad() throws {
@@ -170,12 +185,11 @@ final class DefaultsTests: XCTestCase {
         var s = try JSONDecoder().decode(InputSettings.self, from: Data(old.utf8))
         XCTAssertEqual(s.defaultsVersion, 0)
         s.applyDefaults()
-        let back = try JSONDecoder().decode(InputSettings.self, from: JSONEncoder().encode(s))
-        XCTAssertEqual(back, s)
+        XCTAssertEqual(try JSONDecoder().decode(InputSettings.self, from: JSONEncoder().encode(s)), s)
     }
 
-    func testKeyLookupOnlyAnswersWhenNoModifierIsNeeded() {
+    func testKeyLookupReturnsAValidKeyOrNil() {
         XCTAssertNotNil(KeyCodes.exactCode(for: "a"))
-        if let c = KeyCodes.exactCode(for: "[") { XCTAssertTrue((0..<128).contains(c)) }   // nil on layouts (Spanish) where "[" needs Option
+        if let c = KeyCodes.exactCode(for: "[") { XCTAssertTrue((0..<128).contains(c)) }
     }
 }
