@@ -58,7 +58,7 @@ public enum Feature: String, CaseIterable, Sendable, Identifiable, Codable {
 
     public var title: String {
         switch self {
-        case .display: "Samsung display"
+        case .display: "External displays"
         case .windows: "Windows"
         case .clipboard: "Clipboard"
         case .remap: "Keys and mouse"
@@ -80,7 +80,7 @@ public enum Feature: String, CaseIterable, Sendable, Identifiable, Codable {
 
     public var summary: String {
         switch self {
-        case .display: "Hardware brightness, presets and camera matching for the Samsung ViewFinity."
+        case .display: "Brightness, contrast and color for external monitors over DDC/CI, presets, and camera matching against the MacBook screen."
         case .windows: "Snap, tile and move windows across displays."
         case .clipboard: "Searchable history with pins, snippets and plain-text paste."
         case .remap: "Remap keys and mouse buttons, layers, per-app rules."

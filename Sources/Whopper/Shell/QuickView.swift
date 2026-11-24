@@ -174,7 +174,7 @@ struct QuickView: View {
 
     private var displayRow: some View {
         let presets = display.presetsForSelected()
-        return QuickRow(symbol: "display", title: display.selected?.identity.productName ?? "Samsung display", value: display.selected == nil ? "Open Settings to pick it" : "\(presets.count) preset\(presets.count == 1 ? "" : "s")", opens: .feature(.display)) {
+        return QuickRow(symbol: "display", title: display.selected?.identity.productName ?? "External display", value: display.selected == nil ? "Open Settings to pick it" : "\(presets.count) preset\(presets.count == 1 ? "" : "s")", opens: .feature(.display)) {
             if !presets.isEmpty {
                 Menu("Preset") { ForEach(presets) { p in Button(p.name) { display.apply(p) } } }
                     .menuStyle(.button).buttonStyle(.brandQuiet).fixedSize()

@@ -72,13 +72,13 @@ final class FeaturesSurface: RecipeSurface {
     }
 }
 
-/// The Samsung display preset to apply (presets themselves stay in the display module).
+/// The external-display preset to apply (presets themselves stay in the display module).
 @MainActor
 final class DisplaySurface: RecipeSurface {
     let model: AppModel
     init(_ m: AppModel) { model = m }
     var recipeKey: String { "display" }
-    var recipeTitle: String { "Samsung preset" }
+    var recipeTitle: String { "Display preset" }
     func captureRecipeData() -> Data? { model.lastPresetName.flatMap { RecipeJSON.encode(["preset": $0]) } }
     func applyRecipeData(_ data: Data) -> Bool {
         guard let d = RecipeJSON.decode([String: String].self, from: data), let name = d["preset"] else { return false }

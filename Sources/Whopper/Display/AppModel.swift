@@ -24,12 +24,18 @@ final class AppModel: ObservableObject {
     @Published private(set) var states: [Control: ControlState] = [:]
     @Published var drafts: [Control: Double] = [:]
     @Published var lastOutcomes: [Control: WriteOutcome] = [:]
-    @Published var status: String = "Pick the Samsung to begin."
+    @Published var status: String = "Looking for external displays…"
     @Published var busy = false
     @Published private(set) var presets: [Preset] = []
     @Published var presetError: String?
     /// Name of the last preset applied this session, so a recipe can reapply it.
     @Published private(set) var lastPresetName: String?
+    /// Whether each external display answered a read-only brightness query (by session uuid).
+    enum Reach { case checking, responds, silent }
+    @Published private(set) var reach: [String: Reach] = [:]
+    private var reachGeneration: UInt64 = .max
+    private var probing = false
+    private static let lastDisplayKey = "gg.tico.whoprrr.lastDisplay"
     @Published var lastReport: ApplyReport?
     @Published var lastRestore: [FieldResult]?
     @Published private(set) var learned: [LearnedSetting] = []
@@ -56,7 +62,7 @@ final class AppModel: ObservableObject {
         learnedStore = LearnedStore(url: LearnedStore.defaultURL())
         loadPresets()
         registry.$snapshot.sink { [weak self] snap in
-            Task { @MainActor in self?.snapshotChanged(snap) }
+            Task { @MainActor in self?.snapshotChanged(snap); self?.probeDisplays(snap) }
         }.store(in: &bag)
         registry.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
         registry.start()
@@ -75,8 +81,44 @@ final class AppModel: ObservableObject {
 
     // MARK: Selection and reads
 
+    /// All external (non-built-in) displays macOS reports, whether or not they can be controlled.
+    var externals: [DisplayDescriptor] { displays.filter { !$0.isBuiltIn } }
+
+    /// Stable key for "the display you used last time".
+    func displayKey(_ d: DisplayDescriptor) -> String { d.edidUUID ?? "\(d.identity.vendor)-\(d.identity.model)-\(d.identity.serial)" }
+
+    /// Reads brightness (read-only) from every external display that has a DDC link, to learn which ones really answer, then
+    /// picks one automatically when the choice is obvious. Writes are never sent here.
+    private func probeDisplays(_ snap: DisplayController.Snapshot) {
+        if snap.generation != reachGeneration { reach = [:]; reachGeneration = snap.generation }
+        let candidates = snap.displays.filter { !$0.isBuiltIn && $0.hasEndpoint }
+        guard !probing, candidates.contains(where: { reach[$0.uuid] == nil }) else { autoSelect(); return }
+        probing = true
+        Task {
+            defer { probing = false; autoSelect() }
+            for d in candidates where reach[d.uuid] == nil {
+                reach[d.uuid] = .checking
+                if let t = try? controller.target(for: d, in: snap),
+                   (try? await controller.read(.brightness, target: t, logFailures: false)) != nil { reach[d.uuid] = .responds }
+                else { reach[d.uuid] = .silent }
+            }
+        }
+    }
+
+    /// With nothing chosen yet: the one display that answers, or else the one used last time.
+    private func autoSelect() {
+        guard selectedUUID == nil else { return }
+        let ok = externals.filter { reach[$0.uuid] == .responds }
+        if externals.isEmpty { status = "No external display found." }
+        else if ok.count > 1 && !(UserDefaults.standard.string(forKey: Self.lastDisplayKey).map { k in ok.contains { displayKey($0) == k } } ?? false) { status = "Choose which display to control." }
+        else if ok.isEmpty, !probing { status = "No connected display answered a brightness read." }
+        if ok.count == 1 { select(ok[0].uuid) }
+        else if let key = UserDefaults.standard.string(forKey: Self.lastDisplayKey), let d = ok.first(where: { displayKey($0) == key }) { select(d.uuid) }
+    }
+
     func select(_ uuid: String?) {
         selectedUUID = uuid
+        if let uuid, let d = displays.first(where: { $0.uuid == uuid }), !d.isBuiltIn { UserDefaults.standard.set(displayKey(d), forKey: Self.lastDisplayKey) }
         target = nil
         states = [:]
         lastOutcomes = [:]
@@ -112,7 +154,7 @@ final class AppModel: ObservableObject {
             selectedUUID = t.uuid
             if let d = snap.displays.first(where: { $0.uuid == t.uuid }) { bind(to: d) }
         } else if old != nil {
-            status = "Display changed or went away. Reselect the Samsung."
+            status = "Display changed or went away."
         }
     }
 
@@ -131,8 +173,8 @@ final class AppModel: ObservableObject {
                 if f == .stale { status = "Connection changed. Refreshing…"; return }
             } catch {}
         }
-        if case .value = states[.brightness] { status = "Ready. These are hardware (DDC) settings, not software dimming." }
-        else { status = "Brightness could not be read. Controls stay disabled." }
+        if case .value = states[.brightness] { status = "Ready. These are hardware (DDC) settings, not software dimming."; reach[t.uuid] = .responds }
+        else { status = "Brightness could not be read. Controls stay disabled."; reach[t.uuid] = .silent }
     }
 
     // MARK: Writing any setting (commit on release / explicit choice)
@@ -237,7 +279,7 @@ final class AppModel: ObservableObject {
         for c in readList { if let v = try? await controller.read(c, target: t) { states[c] = .value(v); drafts[c] = Double(v.current) } }
     }
 
-    // MARK: Learn (discover Samsung-specific settings by diffing scans while the user changes the OSD)
+    // MARK: Learn (discover monitor-specific settings by diffing scans while the user changes the OSD)
 
     func runFullScan() {
         guard let t = target, !busy else { return }

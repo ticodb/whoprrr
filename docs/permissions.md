@@ -8,7 +8,7 @@ Whoprrr never asks for a permission a feature you switched off would need. The *
 | **Input Monitoring** | Keys and mouse | To see key presses and mouse buttons so rules can match them, and to talk to Logitech devices over HID++. Whoprrr never stores or sends what you type. |
 | **System Audio Recording** | Audio (equalizer, effects) | To capture what your apps play, process it, and send it to your speakers. Audio is not recorded. |
 | **Microphone** | Microphone | To read your real mic so it can be processed and sent to Whoprrr Mic. |
-| **Camera** | Samsung display (matching) | Only when you run camera-assisted matching, to see both screens at once. Frames are analysed in memory and discarded. |
+| **Camera** | External displays (matching) | Only when you run camera-assisted matching, to see both screens at once. Frames are analysed in memory and discarded. |
 | **Paste from Other Apps** (macOS 15.4 and newer) | Clipboard | macOS asks whenever an app reads the clipboard in the background. Set Whoprrr to **Always Allow** in System Settings → Privacy & Security → Paste from Other Apps. |
 | **Administrator password** | Microphone → Install | Not a privacy permission: writing the driver into `/Library/Audio/Plug-Ins/HAL/` needs it. Once. |
 

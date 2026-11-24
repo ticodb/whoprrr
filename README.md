@@ -32,7 +32,7 @@ Screenshots use sample data (<code>scripts/screenshots.sh</code>).
 | **Keys and mouse** | Remap keys and mouse buttons, tap-vs-hold, Hyper key, layers, per-app and per-keyboard rules, type text or key sequences (numpad decimal, accents), Logitech button support, Mission Control and other system actions, import from Karabiner. |
 | **Audio** | System-wide equalizer per output device with no driver, compressor and limiter, Audio Unit plugins on the output, mic pinning, Bluetooth keep-alive so speakers do not power off. |
 | **Microphone** | A virtual "Whoprrr Mic" that runs your real mic through gain, gate, compressor, equalizer and Audio Unit plugins, so *every* app gets the processed sound. |
-| **Samsung display** | Brightness, contrast and RGB over DDC/CI with verified writes and presets, plus camera-assisted matching against the MacBook screen. |
+| **External displays** | Finds monitors that answer DDC/CI and picks yours automatically: brightness, contrast and RGB with verified writes and presets, plus camera-assisted matching against the MacBook screen. |
 | **Presets** | Every settings panel can save and restore its own presets. |
 
 Each feature is a module you can switch off on the Features page. A switched-off feature does not load and never asks for permissions.

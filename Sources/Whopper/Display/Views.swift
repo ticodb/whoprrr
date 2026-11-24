@@ -1,7 +1,7 @@
 import SwiftUI
 import DisplayCore
 
-/// The Samsung display module panel. The shell supplies padding, width and Quit.
+/// The external displays module panel. The shell supplies padding, width and Quit.
 struct DisplayPanel: View {
     @EnvironmentObject var m: AppModel
     @State private var tab = Tab(rawValue: ProcessInfo.processInfo.environment["SDC_TAB"] ?? "") ?? Tab.control
@@ -32,7 +32,7 @@ struct DisplayPanel: View {
     var header: some View {
         HStack {
             Image(systemName: "display").font(Brand.title3)
-            Text("Samsung display").font(Brand.headline)
+            Text("External displays").font(Brand.headline)
             Spacer()
             if m.transportKind == .fake {
                 Text("FAKE TRANSPORT").font(Brand.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2)
@@ -49,13 +49,7 @@ struct ControlTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Target display").font(Brand.subheadline.bold())
-            Picker("", selection: Binding(get: { m.selectedUUID ?? "" }, set: { m.select($0.isEmpty ? nil : $0) })) {
-                Text("Choose a display…").tag("")
-                ForEach(m.displays) { d in
-                    Text(d.isBuiltIn ? "\(d.shortName) — reference (read-only)" : d.identity.productName).tag(d.uuid)
-                }
-            }.labelsHidden()
+            DisplayList()
             if m.registry.needsRefresh || !m.registry.snapshotIsCurrent {
                 Label("Display connection changed. Refreshing; controls stay off until re-read.", systemImage: "arrow.triangle.2.circlepath")
                     .font(Brand.caption).foregroundStyle(.orange)
@@ -262,12 +256,12 @@ struct AutoMatchBox: View {
             Text("Tips: keep the room light steady, turn off Studio Light / Center Stage / tracking, and disable True Tone on the MacBook while matching.")
                 .font(Brand.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
-                Button(m.matching ? "Matching… (Esc cancels)" : "Match Samsung to MacBook") { m.startMatch() }
+                Button(m.matching ? "Matching… (Esc cancels)" : "Match display to MacBook") { m.startMatch() }
                     .disabled(!m.canAutoMatch).buttonStyle(.borderedProminent)
                 if m.matching { Button("Cancel") { m.cancelMatch() } }
             }
             if m.selectedUUID == nil || m.selected?.isBuiltIn == true {
-                Text("Pick the Samsung on the Control tab first.").font(Brand.caption).foregroundStyle(.secondary)
+                Text("Pick a display on the Control tab first.").font(Brand.caption).foregroundStyle(.secondary)
             }
             ForEach(Array(m.matchLog.enumerated()), id: \.offset) { _, line in
                 Text(line).font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
@@ -293,7 +287,7 @@ struct PresetsTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let e = m.presetError { Text(e).font(Brand.caption).foregroundStyle(.red) }
-            if m.target == nil { Text("Select the Samsung to save or apply presets.").font(Brand.callout).foregroundStyle(.secondary) }
+            if m.target == nil { Text("Select a display to save or apply presets.").font(Brand.callout).foregroundStyle(.secondary) }
 
             GroupBox("Save current settings") {
                 VStack(alignment: .leading) {
@@ -323,7 +317,7 @@ struct PresetsTab: View {
                                     .font(Brand.caption2).foregroundStyle(.secondary)
                             }
                         }
-                        Button("Apply to Samsung") { m.apply(p) }.disabled(!m.controlsEnabled || m.busy)
+                        Button("Apply to display") { m.apply(p) }.disabled(!m.controlsEnabled || m.busy)
                     }
                 }
                 Divider()
@@ -394,6 +388,63 @@ struct DiagnosticsTab: View {
             }.frame(height: 150)
             Text("A blank screen that macOS still recognises leaves no event. Use “Mark blackout” when it happens.")
                 .font(Brand.caption2).foregroundStyle(.secondary)
+        }
+    }
+}
+
+
+/// The external displays macOS reports, with which of them can actually be controlled. One that answers is picked for you.
+struct DisplayList: View {
+    @EnvironmentObject var m: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                SectionLabel(m.externals.count > 1 ? "Displays" : "Display")
+                Spacer()
+                Button("Rescan") { Task { await m.registry.refreshNow() } }.buttonStyle(.brandQuiet)
+            }
+            if m.externals.isEmpty {
+                BrandCard {
+                    Label("No external display found", systemImage: "display.trianglebadge.exclamationmark").font(Brand.display(14.5, .semibold))
+                    Text("Connect a monitor and Whoprrr finds it by itself. The MacBook’s own screen is never changed; it is only used as the reference for matching.")
+                        .font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            ForEach(m.externals) { d in row(d) }
+        }
+    }
+
+    private func row(_ d: DisplayDescriptor) -> some View {
+        let reach = m.reach[d.uuid]
+        let selected = m.selectedUUID == d.uuid
+        let canPick = d.hasEndpoint && reach == .responds
+        return BrandCard {
+            HStack(spacing: 10) {
+                Image(systemName: "display").font(.system(size: 18)).frame(width: 30).foregroundStyle(canPick ? Brand.accentText : Color.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(d.identity.productName).font(Brand.display(15, .semibold))
+                    Text(detail(d, reach)).font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 6)
+                if !d.hasEndpoint { StatusChip(text: "Can’t be controlled", tone: .neutral) }
+                else if reach == .checking || reach == nil { ProgressView().controlSize(.small) }
+                else if reach == .silent { StatusChip(text: "Not answering", tone: .warn) }
+                else if selected { StatusChip(text: "Selected", tone: .good) }
+                else { Button("Use") { m.select(d.uuid) }.buttonStyle(.brandQuiet) }
+            }
+        }
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(selected ? Brand.violetBright.opacity(0.6) : .clear, lineWidth: 1.5))
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onTapGesture { if canPick && !selected { m.select(d.uuid) } }
+    }
+
+    private func detail(_ d: DisplayDescriptor, _ reach: AppModel.Reach?) -> String {
+        if !d.hasEndpoint { return "macOS sees it, but no DDC/CI link was found. Try another cable or port, or turn on DDC/CI in the monitor’s own menu." }
+        switch reach {
+        case .responds: return "Answers DDC/CI. Brightness, contrast and color can be controlled."
+        case .silent: return "Detected, but it did not answer a brightness read. Try another cable or port."
+        default: return "Checking whether it answers…"
         }
     }
 }

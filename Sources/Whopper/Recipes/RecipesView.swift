@@ -26,7 +26,7 @@ struct RecipesView: View {
             gearCard
             if recipes.recipes.isEmpty { emptyState }
             ForEach(recipes.ranked(connected: connected)) { r in card(r) }
-            Text("A recipe remembers your settings for one set of gear: audio and effects, windows, clipboard, keys and mouse, installed features and a Samsung preset. Applying it changes all of them at once. Turn on “Switch automatically” and Whoprrr applies it when exactly that gear is connected.")
+            Text("A recipe remembers your settings for one set of gear: audio and effects, windows, clipboard, keys and mouse, installed features and a display preset. Applying it changes all of them at once. Turn on “Switch automatically” and Whoprrr applies it when exactly that gear is connected.")
                 .font(Brand.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .onAppear { connected = Gear.current(); if nav.newRecipeRequested { nav.newRecipeRequested = false; creating = true } }
