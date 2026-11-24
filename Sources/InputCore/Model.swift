@@ -229,15 +229,17 @@ public struct InputSettings: Codable, Equatable, Sendable {
         defaultsVersion = try c.decodeIfPresent(Int.self, forKey: .defaultsVersion) ?? 0
     }
 
-    public static let currentDefaultsVersion = 1
+    public static let currentDefaultsVersion = 2
 
-    /// Adds the rules every user expects (mouse back and forward buttons do Back and Forward) once. A button that already
-    /// has a rule is left alone, and a rule the user deletes later is not re-added.
+    /// Version 1 added Back/Forward rules for the mouse's side buttons. They did more harm than good: apps already handle those
+    /// buttons natively, and a keyboard shortcut sent in their place depends on the keyboard layout (on a Spanish layout the
+    /// "]" key position types "+", so Forward zoomed in). Remove exactly the rules version 1 added; keep anything the user made.
     public mutating func applyDefaults() {
         guard defaultsVersion < Self.currentDefaultsVersion else { return }
-        func has(_ b: Int) -> Bool { rules.contains { $0.trigger == .mouse(b) || $0.trigger == .logi(b == 3 ? 0x53 : 0x56) } }
-        if !has(3) { rules.append(Rule(name: "Back button → Back", trigger: .mouse(3), tap: .command("common.back"))) }
-        if !has(4) { rules.append(Rule(name: "Forward button → Forward", trigger: .mouse(4), tap: .command("common.forward"))) }
+        rules.removeAll { r in
+            (r.name == "Back button → Back" && r.trigger == .mouse(3) && r.tap == .command("common.back")) ||
+            (r.name == "Forward button → Forward" && r.trigger == .mouse(4) && r.tap == .command("common.forward"))
+        }
         defaultsVersion = Self.currentDefaultsVersion
     }
 }

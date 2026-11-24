@@ -4,13 +4,17 @@ import Carbon.HIToolbox
 /// Finds which physical key types a character on the *current* keyboard layout, so "⌘[" means ⌘ and the bracket key on a US,
 /// Dvorak or AZERTY keyboard alike. Falls back to the US position when the layout cannot type the character without modifiers.
 public enum KeyCodes {
-    public static func code(for ch: Character, fallback: Int) -> Int {
+    public static func code(for ch: Character, fallback: Int) -> Int { exactCode(for: ch) ?? fallback }
+
+    /// The key that types `ch` with no modifiers on the current layout, or nil if there is none (brackets on a Spanish layout
+    /// need Option, so a shortcut like ⌘[ cannot be sent as "⌘ + a key" there).
+    public static func exactCode(for ch: Character) -> Int? {
         guard let src = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
-              let ptr = TISGetInputSourceProperty(src, kTISPropertyUnicodeKeyLayoutData) else { return fallback }
+              let ptr = TISGetInputSourceProperty(src, kTISPropertyUnicodeKeyLayoutData) else { return nil }
         let data = Unmanaged<CFData>.fromOpaque(ptr).takeUnretainedValue() as Data
         let target = String(ch).lowercased()
-        return data.withUnsafeBytes { raw -> Int in
-            guard let layout = raw.baseAddress?.assumingMemoryBound(to: UCKeyboardLayout.self) else { return fallback }
+        return data.withUnsafeBytes { raw -> Int? in
+            guard let layout = raw.baseAddress?.assumingMemoryBound(to: UCKeyboardLayout.self) else { return nil }
             for code in 0..<128 {
                 var dead: UInt32 = 0, length = 0
                 var chars = [UniChar](repeating: 0, count: 4)
@@ -18,7 +22,7 @@ public enum KeyCodes {
                                         &dead, 4, &length, &chars)
                 if st == noErr, length == 1, String(utf16CodeUnits: chars, count: 1).lowercased() == target { return code }
             }
-            return fallback
+            return nil
         }
     }
 }

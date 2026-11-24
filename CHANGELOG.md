@@ -13,7 +13,7 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 - **Keys and mouse**: rule engine with remaps, tap-vs-hold, Hyper, layers, per-app and per-keyboard rules, text and key-sequence outputs (numpad decimal, accents), mouse buttons, Logitech HID++ buttons, system actions (Mission Control and more), Karabiner import, emergency off (⌃⌥⇧⌘⎋).
 - **Audio**: system-wide equalizer per output device without a driver (Core Audio process tap), compressor and limiter, Audio Unit plugins on the system output, mic pinning, Bluetooth keep-alive.
 - **Microphone**: "Whoprrr Mic" virtual device with gain, high-pass, gate, compressor, equalizer and Audio Unit plugins for every app.
-- Mouse back and forward buttons do Back and Forward out of the box, and every button has an Assign menu with everyday actions (navigation, tabs, edit, scrolling, media, system).
+- Every mouse and Logitech button has an Assign menu with everyday actions (navigation, tabs, edit, scrolling, media, system). Back and Forward use ⌘[ and ⌘] where the keyboard layout can type them and ⌘← and ⌘→ where it cannot (for example Spanish layouts). The mouse's own Back and Forward buttons are left to macOS and the apps by default.
 - Menu-bar panel for quick actions, main window for setup, About page with diagnostics and acknowledgments.
 
 ### Known limits

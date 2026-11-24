@@ -14,18 +14,24 @@ enum CommonActions {
         let symbol: String
         let key: Key
         let mods: Mods
+        /// Used when the layout cannot type the character without modifiers (Back as ⌘[ on a Spanish layout, say).
+        var alt: (code: Int, mods: Mods)? = nil
         @MainActor func run(_ c: InputController) {
-            let code: Int
-            switch key { case .char(let ch, let fb): code = KeyCodes.code(for: ch, fallback: fb); case .code(let k): code = k }
-            c.tapChord(code, mods)
+            switch key {
+            case .code(let k): c.tapChord(k, mods)
+            case .char(let ch, let fb):
+                if let code = KeyCodes.exactCode(for: ch) { c.tapChord(code, mods) }
+                else if let alt { c.tapChord(alt.code, alt.mods) }
+                else { c.tapChord(fb, mods) }
+            }
         }
     }
 
     static let all: [Action] = [
-        Action(id: "common.back", title: "Back", category: "Navigate", symbol: "chevron.left", key: .char("[", fallback: 33), mods: .command),
-        Action(id: "common.forward", title: "Forward", category: "Navigate", symbol: "chevron.right", key: .char("]", fallback: 30), mods: .command),
-        Action(id: "common.prevTab", title: "Previous tab", category: "Tabs and windows", symbol: "arrow.left.square", key: .char("[", fallback: 33), mods: [.command, .shift]),
-        Action(id: "common.nextTab", title: "Next tab", category: "Tabs and windows", symbol: "arrow.right.square", key: .char("]", fallback: 30), mods: [.command, .shift]),
+        Action(id: "common.back", title: "Back", category: "Navigate", symbol: "chevron.left", key: .char("[", fallback: 33), mods: .command, alt: (123, .command)),
+        Action(id: "common.forward", title: "Forward", category: "Navigate", symbol: "chevron.right", key: .char("]", fallback: 30), mods: .command, alt: (124, .command)),
+        Action(id: "common.prevTab", title: "Previous tab", category: "Tabs and windows", symbol: "arrow.left.square", key: .char("[", fallback: 33), mods: [.command, .shift], alt: (48, [.control, .shift])),
+        Action(id: "common.nextTab", title: "Next tab", category: "Tabs and windows", symbol: "arrow.right.square", key: .char("]", fallback: 30), mods: [.command, .shift], alt: (48, .control)),
         Action(id: "common.newTab", title: "New tab", category: "Tabs and windows", symbol: "plus.square", key: .char("t", fallback: 17), mods: .command),
         Action(id: "common.closeTab", title: "Close tab or window", category: "Tabs and windows", symbol: "xmark.square", key: .char("w", fallback: 13), mods: .command),
         Action(id: "common.reopenTab", title: "Reopen closed tab", category: "Tabs and windows", symbol: "arrow.uturn.backward.square", key: .char("t", fallback: 17), mods: [.command, .shift]),

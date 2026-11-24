@@ -229,7 +229,10 @@ struct InputPanel: View {
                 Button { editing = rule } label: { Image(systemName: "pencil") }.buttonStyle(.plain)
                 Button { c.delete(rule.id) } label: { Image(systemName: "trash") }.buttonStyle(.plain)
             } else {
-                if case .mouse = trigger { Text("macOS default").font(Brand.caption2).foregroundStyle(.secondary) }
+                if case .mouse(let b) = trigger {
+                    Text(b == 3 ? "Default: Back in browsers and Finder" : b == 4 ? "Default: Forward in browsers and Finder" : "Default: middle click")
+                        .font(Brand.caption2).foregroundStyle(.secondary)
+                }
                 assignMenu(title: title, trigger: trigger)
             }
         }

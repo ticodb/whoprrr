@@ -141,45 +141,41 @@ final class TransformTests: XCTestCase {
 }
 
 final class DefaultsTests: XCTestCase {
-    func testBackAndForwardButtonsGetDefaultRulesOnce() {
-        var s = InputSettings()
-        s.applyDefaults()
-        XCTAssertEqual(s.rules.map(\.trigger), [.mouse(3), .mouse(4)])
-        XCTAssertEqual(s.rules.map(\.tap), [.command("common.back"), .command("common.forward")])
-        // A rule the user deletes must not come back.
-        s.rules.removeAll()
-        s.applyDefaults()
-        XCTAssertTrue(s.rules.isEmpty)
+    func testSideButtonsAreLeftToMacOSByDefault() {
+        var s = InputSettings(); s.applyDefaults()
+        XCTAssertTrue(s.rules.isEmpty)                 // no Back/Forward rules: apps handle those buttons themselves
+        XCTAssertEqual(s.defaultsVersion, InputSettings.currentDefaultsVersion)
+        let e = RemapEngine(rules: s.rules)
+        XCTAssertTrue(e.handle(InputEvent(.down, .mouse(3), mods: [], bundle: nil, time: 0)).isPlainPass)
+        XCTAssertTrue(e.handle(InputEvent(.down, .mouse(4), mods: [], bundle: nil, time: 0)).isPlainPass)
     }
 
-    func testExistingRulesForThoseButtonsAreRespected() {
+    func testRulesAddedByTheFirstDefaultsAreRemovedButUserRulesStay() {
         var s = InputSettings()
-        s.rules = [Rule(trigger: .mouse(3), tap: .chord(Chord(0))), Rule(trigger: .logi(0x56), tap: .nothing)]
+        s.defaultsVersion = 1
+        s.rules = [
+            Rule(name: "Back button → Back", trigger: .mouse(3), tap: .command("common.back")),
+            Rule(name: "Forward button → Forward", trigger: .mouse(4), tap: .command("common.forward")),
+            Rule(name: "Back button", trigger: .mouse(3), tap: .command("common.back"), scope: Scope(mode: .only, bundleIDs: ["com.apple.finder"])),   // the user's own
+            Rule(name: "Other", trigger: .key(0), tap: .nothing),
+        ]
+        s.applyDefaults()
+        XCTAssertEqual(s.rules.map(\.name), ["Back button", "Other"])
         s.applyDefaults()
         XCTAssertEqual(s.rules.count, 2)
     }
 
-    func testSettingsSavedBeforeDefaultsExistedStillLoadAndGetThem() throws {
+    func testSettingsSavedBeforeDefaultsExistedStillLoad() throws {
         let old = #"{"enabled":true,"rules":[],"hidMappings":[],"invertMouseWheel":false}"#
         var s = try JSONDecoder().decode(InputSettings.self, from: Data(old.utf8))
         XCTAssertEqual(s.defaultsVersion, 0)
         s.applyDefaults()
-        XCTAssertEqual(s.defaultsVersion, InputSettings.currentDefaultsVersion)
-        XCTAssertEqual(s.rules.count, 2)
         let back = try JSONDecoder().decode(InputSettings.self, from: JSONEncoder().encode(s))
         XCTAssertEqual(back, s)
     }
 
-    func testBackButtonRunsTheBackCommand() {
-        var s = InputSettings(); s.applyDefaults()
-        let e = RemapEngine(rules: s.rules)
-        let d = e.handle(InputEvent(.down, .mouse(3), mods: [], bundle: "com.apple.Safari", time: 0))
-        XCTAssertEqual(d.emits, [.command("common.back")]); XCTAssertTrue(d.swallow)
-        XCTAssertEqual(e.handle(InputEvent(.up, .mouse(3))), Decision(swallow: true))
-    }
-
-    func testKeyLookupReturnsAValidKeyCode() {
-        let a = KeyCodes.code(for: "a", fallback: 0), br = KeyCodes.code(for: "[", fallback: 33)
-        XCTAssertTrue((0..<128).contains(a)); XCTAssertTrue((0..<128).contains(br))
+    func testKeyLookupOnlyAnswersWhenNoModifierIsNeeded() {
+        XCTAssertNotNil(KeyCodes.exactCode(for: "a"))
+        if let c = KeyCodes.exactCode(for: "[") { XCTAssertTrue((0..<128).contains(c)) }   // nil on layouts (Spanish) where "[" needs Option
     }
 }
