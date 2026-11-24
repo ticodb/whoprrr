@@ -215,7 +215,31 @@ public struct InputSettings: Codable, Equatable, Sendable {
     public var hidMappings: [HIDMapping] = []
     /// Mouse wheel scrolls the opposite way to the trackpad.
     public var invertMouseWheel = false
+    /// Which built-in default rules have been offered already, so one the user deleted does not come back.
+    public var defaultsVersion = 0
     public init() {}
+
+    private enum CodingKeys: String, CodingKey { case enabled, rules, hidMappings, invertMouseWheel, defaultsVersion }
+    public init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        rules = try c.decodeIfPresent([Rule].self, forKey: .rules) ?? []
+        hidMappings = try c.decodeIfPresent([HIDMapping].self, forKey: .hidMappings) ?? []
+        invertMouseWheel = try c.decodeIfPresent(Bool.self, forKey: .invertMouseWheel) ?? false
+        defaultsVersion = try c.decodeIfPresent(Int.self, forKey: .defaultsVersion) ?? 0
+    }
+
+    public static let currentDefaultsVersion = 1
+
+    /// Adds the rules every user expects (mouse back and forward buttons do Back and Forward) once. A button that already
+    /// has a rule is left alone, and a rule the user deletes later is not re-added.
+    public mutating func applyDefaults() {
+        guard defaultsVersion < Self.currentDefaultsVersion else { return }
+        func has(_ b: Int) -> Bool { rules.contains { $0.trigger == .mouse(b) || $0.trigger == .logi(b == 3 ? 0x53 : 0x56) } }
+        if !has(3) { rules.append(Rule(name: "Back button → Back", trigger: .mouse(3), tap: .command("common.back"))) }
+        if !has(4) { rules.append(Rule(name: "Forward button → Forward", trigger: .mouse(4), tap: .command("common.forward"))) }
+        defaultsVersion = Self.currentDefaultsVersion
+    }
 }
 
 extension Array {

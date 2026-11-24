@@ -36,7 +36,11 @@ final class InputController: ObservableObject {
     var commands: [(id: String, title: String, run: () -> Void)] = []
 
     init() {
-        settings = store.load(default: InputSettings())
+        var loaded = store.load(default: InputSettings())
+        let before = loaded
+        loaded.applyDefaults()
+        settings = loaded
+        if loaded != before { store.save(loaded) }
         poster.onCommand = { [weak self] id in DispatchQueue.main.async { self?.runCommand(id) } }
         hub.onDevices = { [weak self] d in DispatchQueue.main.async { self?.logiDevices = d } }
         hub.onButton = { [weak self] _, cid, down in DispatchQueue.main.async { self?.feedLogi(cid, down: down) } }

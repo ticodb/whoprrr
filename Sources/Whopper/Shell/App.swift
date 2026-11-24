@@ -67,6 +67,7 @@ enum Shared {
     static func startFeatures() {
         input.commands = [("clipboard.open", "Open clipboard history", { clipboard.togglePicker() })]
             + SystemActions.all.map { a in (a.id, a.title, { a.run(input) }) }
+            + CommonActions.all.map { a in (a.id, a.title, { a.run(input) }) }
             + WindowAction.allCases.map { a in ("window.\(a.rawValue)", "Window: \(a.title)", { windows.run(a) }) }
         features.$enabled.sink { enabled in
             audio.setActive(enabled.contains(.audio) || enabled.contains(.microphone))

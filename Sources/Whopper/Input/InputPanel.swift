@@ -115,7 +115,10 @@ struct InputPanel: View {
         return t.label
     }
     private func outputName(_ o: Output) -> String {
-        if case .command(let id) = o { return c.commands.first { $0.id == id }?.title.replacingOccurrences(of: "Window: ", with: "") ?? o.summary }
+        if case .command(let id) = o {
+            let title = c.commands.first { $0.id == id }?.title ?? CommonActions.all.first { $0.id == id }?.title ?? SystemActions.all.first { $0.id == id }?.title
+            return title?.replacingOccurrences(of: "Window: ", with: "") ?? (id == "clipboard.open" ? "Open clipboard history" : o.summary)
+        }
         return o.summary
     }
     private func describe(_ r: Rule) -> String {
@@ -198,21 +201,26 @@ struct InputPanel: View {
         }
     }
 
-    /// Middle, back and forward arrive as ordinary mouse buttons (see “Any mouse”); only list them here if a rule already diverts them.
+    /// Middle, back and forward are listed once, under "Any mouse", whichever way their rule is stored.
     private func listed(_ d: LogiDevice) -> [Reprog.Control] {
         let standard: Set<UInt16> = [0x0052, 0x0053, 0x0056]
-        return d.controls.filter { ctl in
-            ctl.isDivertable && (!standard.contains(ctl.cid) || c.settings.rules.contains { rule in rule.trigger == .logi(Int(ctl.cid)) })
-        }
+        return d.controls.filter { $0.isDivertable && !standard.contains($0.cid) }
     }
 
     private func logiRow(_ ctl: Reprog.Control) -> some View {
         buttonRow(title: ctl.name, trigger: .logi(Int(ctl.cid)))
     }
 
+    /// The Logitech control that carries the same button, for devices whose standard buttons are diverted.
+    private func logiAlias(_ t: Trigger) -> Trigger? {
+        guard case .mouse(let b) = t else { return nil }
+        switch b { case 2: return .logi(0x52); case 3: return .logi(0x53); case 4: return .logi(0x56); default: return nil }
+    }
+
     /// One button: its name, what it does now, and a menu to give it something to do.
     private func buttonRow(title: String, trigger: Trigger) -> some View {
-        let rule = c.settings.rules.first { $0.trigger == trigger && $0.requiredMods.isEmpty && $0.layer == nil }
+        let alias = logiAlias(trigger)
+        let rule = c.settings.rules.first { ($0.trigger == trigger || (alias != nil && $0.trigger == alias!)) && $0.requiredMods.isEmpty && $0.layer == nil }
         return HStack(spacing: 6) {
             Text(title).font(Brand.caption)
             Spacer()
@@ -221,6 +229,7 @@ struct InputPanel: View {
                 Button { editing = rule } label: { Image(systemName: "pencil") }.buttonStyle(.plain)
                 Button { c.delete(rule.id) } label: { Image(systemName: "trash") }.buttonStyle(.plain)
             } else {
+                if case .mouse = trigger { Text("macOS default").font(Brand.caption2).foregroundStyle(.secondary) }
                 assignMenu(title: title, trigger: trigger)
             }
         }
@@ -229,10 +238,18 @@ struct InputPanel: View {
     private func assignMenu(title: String, trigger: Trigger) -> some View {
         func give(_ o: Output) { c.save(Rule(name: title, trigger: trigger, tap: o)) }
         return Menu("Assign") {
-            Section("System") {
+            ForEach(CommonActions.categories, id: \.self) { cat in
+                Menu(cat) {
+                    ForEach(CommonActions.all.filter { $0.category == cat }) { a in
+                        Button { give(.command(a.id)) } label: { Label(a.title, systemImage: a.symbol) }
+                    }
+                }
+            }
+            Menu("Media") { ForEach(MediaKey.allCases, id: \.self) { k in Button(k.title) { give(.media(k)) } } }
+            Menu("System") {
                 ForEach(c.systemActions, id: \.id) { a in Button { give(.command(a.id)) } label: { Label(a.title, systemImage: a.symbol) } }
             }
-            Section("Whoprrr") {
+            Menu("Whoprrr") {
                 Button { give(.command("clipboard.open")) } label: { Label("Clipboard history", systemImage: "doc.on.clipboard") }
                 Menu("Window") {
                     ForEach(c.commands.filter { $0.id.hasPrefix("window.") }, id: \.id) { cmd in
@@ -240,10 +257,9 @@ struct InputPanel: View {
                     }
                 }
             }
-            Section("Other") {
-                Button("Open an app…") { if let b = OutputEditor.chooseApp() { give(.openApp(b)) } }
-                Button("Key combo or something else…") { editing = Rule(name: title, trigger: trigger, tap: .chord(Chord(0))) }
-            }
+            Divider()
+            Button("Open an app…") { if let b = OutputEditor.chooseApp() { give(.openApp(b)) } }
+            Button("Key combo or something else…") { editing = Rule(name: title, trigger: trigger, tap: .chord(Chord(0))) }
         }.menuStyle(.button).buttonStyle(.brandQuiet).fixedSize()
     }
 
