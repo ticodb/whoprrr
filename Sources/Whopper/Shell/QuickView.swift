@@ -33,6 +33,7 @@ struct QuickView: View {
         .padding(16)
         .frame(width: 400)
         .tint(Brand.violetBright)
+        .background(DrawerWindowReader())
         .onAppear { refreshPermissions(); windows.refreshTrust() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refreshPermissions() }
     }
@@ -224,5 +225,14 @@ struct QuickRow<Trailing: View>: View {
         .onHover { hover = $0 }
         .onTapGesture { if let opens { Shared.showWindow(page: opens) } }
         .help(opens == nil ? "" : "Open in Settings")
+    }
+}
+
+/// Remembers which window hosts the menu-bar drawer, so the main window can open right beside it.
+private struct DrawerWindowReader: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { Reader() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+    final class Reader: NSView {
+        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); Shared.drawerWindow = window }
     }
 }

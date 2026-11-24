@@ -29,24 +29,43 @@ enum Shared {
             .environmentObject(clipboard).environmentObject(input).environmentObject(nav).environmentObject(recipes).environmentObject(presets)
     }
 
-    /// The main window: sidebar of features and a page for each. While it is open Whoprrr shows in the Dock and ⌘-Tab,
-    /// and goes back to menu-bar only when it closes.
+    /// The window that hosts the menu-bar drawer (set by the drawer's own view).
+    weak static var drawerWindow: NSWindow?
+
+    /// The drawer's frame if it is open right now.
+    private static func drawerFrame() -> NSRect? {
+        guard let w = drawerWindow, w.isVisible, w !== window else { return nil }
+        return w.frame
+    }
+
+    /// The main window: sidebar of features and a page for each. When it is opened from the menu-bar drawer it appears right beside
+    /// the drawer (top edges aligned); otherwise it comes back where you left it. While it is open Whoprrr shows in the Dock and
+    /// ⌘-Tab, and goes back to menu-bar only when it closes.
     static func showWindow(page: AppPage? = nil) {
+        let drawer = drawerFrame()          // read before activating: activating can close the drawer
         if let page { nav.page = page }
         NSApp.setActivationPolicy(.regular)
-        if let w = window { w.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return }
-        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 940, height: 700), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+        let w: NSWindow
+        let wasVisible = window?.isVisible == true
+        if let existing = window { w = existing } else {
+            w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 940, height: 700), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                          backing: .buffered, defer: false)
-        w.title = "Whoprrr"
-        w.titlebarAppearsTransparent = true
-        w.contentView = NSHostingView(rootView: wrap(MainWindowView()))
-        w.isReleasedWhenClosed = false
-        w.delegate = windowDelegate
-        w.setFrameAutosaveName("WhoprrrMainWindow")
-        if !w.setFrameUsingName("WhoprrrMainWindow") { w.center() }
+            w.title = "Whoprrr"
+            w.titlebarAppearsTransparent = true
+            w.contentView = NSHostingView(rootView: wrap(MainWindowView()))
+            w.isReleasedWhenClosed = false
+            w.delegate = windowDelegate
+            w.setFrameAutosaveName("WhoprrrMainWindow")
+            if !w.setFrameUsingName("WhoprrrMainWindow") { w.center() }
+            window = w
+        }
+        // A window the user already has open stays where they put it; a newly shown one goes beside the drawer.
+        if !wasVisible, let drawer {
+            let screen = NSScreen.screens.first { $0.frame.intersects(drawer) } ?? NSScreen.main ?? NSScreen.screens[0]
+            w.setFrame(PanelPlacement.frame(beside: drawer, size: NSSize(width: 940, height: 700), visible: screen.visibleFrame), display: true)
+        }
         w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        window = w
     }
 
     /// Makes every settings surface available to recipes, and switches recipes automatically when the connected gear changes.
