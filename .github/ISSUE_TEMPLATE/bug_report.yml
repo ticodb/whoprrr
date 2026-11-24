@@ -1,0 +1,34 @@
+name: Bug report
+description: Something does not work, or works wrongly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing the beta. In the app: **Settings… → About → Report a problem** copies a safe diagnostics summary (no device names, clipboard contents or rules). Paste it below.
+  - type: textarea
+    id: what
+    attributes: { label: What happened?, description: What did you do, what did you expect, what happened instead? }
+    validations: { required: true }
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part?
+      options: [Recipes, Windows, Clipboard, Keys and mouse, Logitech buttons, Audio (system equalizer / effects), Microphone / Whoprrr Mic, Audio Unit plugins, Samsung display, Permissions / install, Other]
+    validations: { required: true }
+  - type: input
+    id: hardware
+    attributes: { label: Relevant hardware, description: "Mac model, display, keyboard/mouse, microphone, plugin names" }
+  - type: textarea
+    id: diag
+    attributes: { label: Diagnostics, description: "Paste from About → Copy diagnostics", render: text }
+  - type: textarea
+    id: steps
+    attributes: { label: Steps to reproduce }
+  - type: checkboxes
+    id: safe
+    attributes:
+      label: Before sending
+      options:
+        - label: I removed personal information (serial numbers, clipboard contents, names) from anything I pasted
+          required: true

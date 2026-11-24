@@ -1,0 +1,18 @@
+name: Hardware report
+description: Tell us what worked (or not) on your gear
+labels: [hardware]
+body:
+  - type: markdown
+    attributes: { value: "Hardware results are the most useful thing in the beta. Short is fine." }
+  - type: input
+    id: mac
+    attributes: { label: Mac and macOS version }
+    validations: { required: true }
+  - type: textarea
+    id: gear
+    attributes: { label: Gear tested, description: "Display model and connection, keyboard, mouse, microphone, speakers, plugins" }
+    validations: { required: true }
+  - type: textarea
+    id: result
+    attributes: { label: What worked and what did not }
+    validations: { required: true }
