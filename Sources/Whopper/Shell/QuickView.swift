@@ -73,7 +73,7 @@ struct QuickView: View {
             else { value = "\(g.present.count) of \(a.devices.count) pieces of gear connected" }
         } else if recipes.recipes.isEmpty { value = "Save your setup for this gear" }
         return VStack(alignment: .leading, spacing: 6) {
-            QuickRow(symbol: active?.symbol ?? "fork.knife", title: active?.name ?? "Recipe", value: value) {
+            QuickRow(symbol: active?.symbol ?? "fork.knife", title: active?.name ?? "Recipe", value: value, opens: .recipes) {
                 Menu {
                     ForEach(recipes.ranked(connected: connected)) { r in
                         Button { recipes.apply(r.id) } label: { Label(r.name, systemImage: r.id == active?.id ? "checkmark" : r.symbol) }
@@ -90,7 +90,7 @@ struct QuickView: View {
     private var keysRow: some View {
         let paused = input.status == .paused
         let running = input.status == .running
-        return QuickRow(symbol: "keyboard", title: "Keys and mouse", value: keysValue) {
+        return QuickRow(symbol: "keyboard", title: "Keys and mouse", value: keysValue, opens: .feature(.remap)) {
             if running || paused {
                 Button(paused ? "Resume" : "Pause") { input.setPaused(!paused) }.buttonStyle(.brandQuiet)
             }
@@ -108,14 +108,16 @@ struct QuickView: View {
     }
 
     private var clipboardRow: some View {
-        QuickRow(symbol: "doc.on.clipboard", title: "Clipboard", value: "\(clipboard.itemCount) saved · \(clipboard.settings.hotkey.display)") {
+        QuickRow(symbol: "doc.on.clipboard", title: "Clipboard", value: "\(clipboard.itemCount) saved · \(clipboard.settings.hotkey.display)", opens: .feature(.clipboard)) {
             Button("Open") { clipboard.togglePicker() }.buttonStyle(.brandQuiet)
         }
     }
 
     private var windowsRow: some View {
         BrandCard {
-            Text("Window").font(Brand.display(15, .semibold))
+            HStack { Text("Window").font(Brand.display(15, .semibold)); Spacer()
+                Button { Shared.showWindow(page: .feature(.windows)) } label: { Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)) }
+                    .buttonStyle(.plain).foregroundStyle(.secondary).help("Open Windows settings") }
             HStack(spacing: 6) {
                 ForEach([(WindowAction.leftHalf, "rectangle.lefthalf.inset.filled"), (.rightHalf, "rectangle.righthalf.inset.filled"),
                          (.topHalf, "rectangle.tophalf.inset.filled"), (.bottomHalf, "rectangle.bottomhalf.inset.filled"),
@@ -134,7 +136,7 @@ struct QuickView: View {
 
     private var outputRow: some View {
         let name = audio.defaultOutputUID.map(audio.name(for:)) ?? "No output"
-        return QuickRow(symbol: "speaker.wave.2", title: name, value: eqValue) {
+        return QuickRow(symbol: "speaker.wave.2", title: name, value: eqValue, opens: .feature(.audio)) {
             Toggle("", isOn: Binding(get: { audio.settings.eq.enabled }, set: { audio.settings.eq.enabled = $0 })).toggleStyle(.switch).labelsHidden()
         }
     }
@@ -149,13 +151,13 @@ struct QuickView: View {
 
     private var inputRow: some View {
         let name = audio.defaultInputUID.map(audio.name(for:)) ?? "No input"
-        return QuickRow(symbol: "mic", title: name, value: audio.settings.inputPin.enabled ? "Pinned as your input" : "Follows macOS") {
+        return QuickRow(symbol: "mic", title: name, value: audio.settings.inputPin.enabled ? "Pinned as your input" : "Follows macOS", opens: .feature(.audio)) {
             Toggle("", isOn: Binding(get: { audio.settings.inputPin.enabled }, set: { audio.settings.inputPin.enabled = $0 })).toggleStyle(.switch).labelsHidden()
         }
     }
 
     private var micRow: some View {
-        QuickRow(symbol: "waveform", title: "Whoprrr Mic", value: micValue) {
+        QuickRow(symbol: "waveform", title: "Whoprrr Mic", value: micValue, opens: .feature(.microphone)) {
             Toggle("", isOn: Binding(get: { audio.settings.mic.enabled }, set: { audio.enableMic($0) })).toggleStyle(.switch).labelsHidden()
         }
     }
@@ -171,7 +173,7 @@ struct QuickView: View {
 
     private var displayRow: some View {
         let presets = display.presetsForSelected()
-        return QuickRow(symbol: "display", title: display.selected?.identity.productName ?? "Samsung display", value: display.selected == nil ? "Open Settings to pick it" : "\(presets.count) preset\(presets.count == 1 ? "" : "s")") {
+        return QuickRow(symbol: "display", title: display.selected?.identity.productName ?? "Samsung display", value: display.selected == nil ? "Open Settings to pick it" : "\(presets.count) preset\(presets.count == 1 ? "" : "s")", opens: .feature(.display)) {
             if !presets.isEmpty {
                 Menu("Preset") { ForEach(presets) { p in Button(p.name) { display.apply(p) } } }
                     .menuStyle(.button).buttonStyle(.brandQuiet).fixedSize()
@@ -200,7 +202,10 @@ struct QuickView: View {
 /// One line of the menu-bar panel: tile, title, value, and an optional control on the right.
 struct QuickRow<Trailing: View>: View {
     var symbol: String, title: String, value: String
+    /// Where a click on the row (anywhere except its own controls) opens in the main window.
+    var opens: AppPage?
     @ViewBuilder var trailing: () -> Trailing
+    @State private var hover = false
     var body: some View {
         BrandCard {
             HStack(spacing: 12) {
@@ -214,5 +219,10 @@ struct QuickRow<Trailing: View>: View {
                 trailing()
             }
         }
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Brand.violetBright.opacity(hover && opens != nil ? 0.55 : 0)))
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onHover { hover = $0 }
+        .onTapGesture { if let opens { Shared.showWindow(page: opens) } }
+        .help(opens == nil ? "" : "Open in Settings")
     }
 }
