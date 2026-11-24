@@ -58,8 +58,11 @@ public final class ClipStore: @unchecked Sendable {
             let hash = Self.hash(c)
             do {
                 if let existing = try db.query("SELECT id FROM items WHERE hash=?", [.text(hash)], { $0.int(0) }).first {
-                    try db.exec("UPDATE items SET used=?, use_count=use_count+1, source_app=COALESCE(?,source_app), source_bundle=COALESCE(?,source_bundle) WHERE id=?",
-                                [.double(now.timeIntervalSince1970), c.sourceApp.map(SQLBind.text) ?? .null, c.sourceBundle.map(SQLBind.text) ?? .null, .int(existing)])
+                    let stamp: SQLBind = .double(now.timeIntervalSince1970)
+                    let app: SQLBind = Self.optText(c.sourceApp)
+                    let bundle: SQLBind = Self.optText(c.sourceBundle)
+                    let args: [SQLBind] = [stamp, app, bundle, .int(existing)]
+                    try db.exec("UPDATE items SET used=?, use_count=use_count+1, source_app=COALESCE(?,source_app), source_bundle=COALESCE(?,source_bundle) WHERE id=?", args)
                     return existing
                 }
                 var imageFile: String?
@@ -68,21 +71,37 @@ public final class ClipStore: @unchecked Sendable {
                     try img.write(to: imagesDir.appendingPathComponent(imageFile!), options: .atomic)
                 }
                 let preview = CaptureRules.preview(of: c)
-                let size = (c.text?.utf8.count ?? 0) + (c.imageData?.count ?? 0) + (c.rtf?.count ?? 0) + (c.html?.count ?? 0)
-                let filesJSON = c.files.isEmpty ? nil : String(data: try JSONEncoder().encode(c.files), encoding: .utf8)
+                let size: Int = (c.text?.utf8.count ?? 0) + (c.imageData?.count ?? 0) + (c.rtf?.count ?? 0) + (c.html?.count ?? 0)
+                var filesJSON: String?
+                if !c.files.isEmpty { filesJSON = String(data: try JSONEncoder().encode(c.files), encoding: .utf8) }
+                let searchText: String = CaptureRules.fold(preview + " " + (c.text ?? "") + " " + (c.sourceApp ?? ""))
+                let stamp: SQLBind = .double(now.timeIntervalSince1970)
+                var args: [SQLBind] = []
+                args.append(.text(c.kind.rawValue))
+                args.append(Self.optText(c.text))
+                args.append(.text(searchText))
+                args.append(.text(preview))
+                args.append(Self.optBlob(c.rtf))
+                args.append(Self.optBlob(c.html))
+                args.append(Self.optText(imageFile))
+                args.append(Self.optText(filesJSON))
+                args.append(Self.optText(c.sourceApp))
+                args.append(Self.optText(c.sourceBundle))
+                args.append(stamp)
+                args.append(stamp)
+                args.append(.int(Int64(size)))
+                args.append(.text(hash))
                 try db.exec("""
                     INSERT INTO items(kind,text,search,preview,rtf,html,image_file,files,source_app,source_bundle,created,used,size,hash)
                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                    """, [.text(c.kind.rawValue), c.text.map(SQLBind.text) ?? .null,
-                          .text(CaptureRules.fold(preview + " " + (c.text ?? "") + " " + (c.sourceApp ?? ""))),
-                          .text(preview), c.rtf.map(SQLBind.blob) ?? .null, c.html.map(SQLBind.blob) ?? .null,
-                          imageFile.map(SQLBind.text) ?? .null, filesJSON.map(SQLBind.text) ?? .null,
-                          c.sourceApp.map(SQLBind.text) ?? .null, c.sourceBundle.map(SQLBind.text) ?? .null,
-                          .double(now.timeIntervalSince1970), .double(now.timeIntervalSince1970), .int(Int64(size)), .text(hash)])
+                    """, args)
                 return db.lastInsertID
             } catch { return nil }
         }
     }
+
+    private static func optText(_ s: String?) -> SQLBind { s.map { SQLBind.text($0) } ?? .null }
+    private static func optBlob(_ d: Data?) -> SQLBind { d.map { SQLBind.blob($0) } ?? .null }
 
     /// A user-written snippet (always pinned).
     @discardableResult
