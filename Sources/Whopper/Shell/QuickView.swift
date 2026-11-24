@@ -114,18 +114,27 @@ struct QuickView: View {
         }
     }
 
+    /// Left and right half, the three thirds, center, next display, restore.
+    private static let windowTiles: [(WindowAction, AnyView)] = [
+        (.leftHalf, AnyView(ZoneGlyph(x: 0, width: 0.5))),
+        (.rightHalf, AnyView(ZoneGlyph(x: 0.5, width: 0.5))),
+        (.firstThird, AnyView(ZoneGlyph(x: 0, width: 1.0 / 3))),
+        (.centerThird, AnyView(ZoneGlyph(x: 1.0 / 3, width: 1.0 / 3))),
+        (.lastThird, AnyView(ZoneGlyph(x: 2.0 / 3, width: 1.0 / 3))),
+        (.center, AnyView(ZoneGlyph(x: 0.25, width: 0.5, y: 0.2, height: 0.6))),
+        (.nextDisplay, AnyView(Image(systemName: "display.2").font(.system(size: 16)))),
+        (.restore, AnyView(Image(systemName: "arrow.uturn.backward").font(.system(size: 16)))),
+    ]
+
     private var windowsRow: some View {
         BrandCard {
             HStack { Text("Window").font(Brand.display(15, .semibold)); Spacer()
                 Button { Shared.showWindow(page: .feature(.windows)) } label: { Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)) }
                     .buttonStyle(.plain).foregroundStyle(.secondary).help("Open Windows settings") }
             HStack(spacing: 6) {
-                ForEach([(WindowAction.leftHalf, "rectangle.lefthalf.inset.filled"), (.rightHalf, "rectangle.righthalf.inset.filled"),
-                         (.topHalf, "rectangle.tophalf.inset.filled"), (.bottomHalf, "rectangle.bottomhalf.inset.filled"),
-                         (.maximize, "arrow.up.left.and.arrow.down.right"), (.center, "rectangle.center.inset.filled"),
-                         (.nextDisplay, "display.2"), (.restore, "arrow.uturn.backward")], id: \.0) { a, sym in
+                ForEach(Self.windowTiles, id: \.0) { a, glyph in
                     Button { windows.runOnPreviousApp(a) } label: {
-                        Image(systemName: sym).font(.system(size: 16)).frame(maxWidth: .infinity).frame(height: 34)
+                        glyph.frame(maxWidth: .infinity).frame(height: 34)
                             .background(Brand.violet.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                             .foregroundStyle(Brand.accentText)
                     }.buttonStyle(.plain).help(a.title)
@@ -234,5 +243,23 @@ private struct DrawerWindowReader: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
     final class Reader: NSView {
         override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); Shared.drawerWindow = window }
+    }
+}
+
+
+/// A little screen with one zone filled in: where a window will go.
+struct ZoneGlyph: View {
+    var x: CGFloat, width: CGFloat
+    var y: CGFloat = 0, height: CGFloat = 1
+    var body: some View {
+        Canvas { ctx, size in
+            let r = CGRect(x: 0.75, y: 0.75, width: size.width - 1.5, height: size.height - 1.5)
+            ctx.stroke(Path(roundedRect: r, cornerRadius: 3.5), with: .foreground, lineWidth: 1.4)
+            let inset: CGFloat = 2.5
+            let inner = r.insetBy(dx: inset, dy: inset)
+            let zone = CGRect(x: inner.minX + inner.width * x, y: inner.minY + inner.height * y, width: inner.width * width, height: inner.height * height)
+            ctx.fill(Path(roundedRect: zone.insetBy(dx: 0.5, dy: 0.5), cornerRadius: 1.5), with: .foreground)
+        }
+        .frame(width: 28, height: 19)
     }
 }
