@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleDevelopmentRegion</key><string>English</string>
+  <key>CFBundleExecutable</key><string>WhopperMic</string>
+  <key>CFBundleIdentifier</key><string>gg.tico.whopper.mic</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>WhopperMic</string>
+  <key>CFBundlePackageType</key><string>BNDL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFPlugInFactories</key><dict><key>8F4A1B2C-5D3E-4F60-9A7B-2C1D0E9F8A71</key><string>WhopperMic_Create</string></dict>
+  <key>CFPlugInTypes</key><dict><key>443ABAB8-E7B3-491A-B985-BEB9187030DB</key><array><string>8F4A1B2C-5D3E-4F60-9A7B-2C1D0E9F8A71</string></array></dict>
+  <key>CFPlugInDynamicRegisterFunction</key><string></string>
+  <key>CFPlugInDynamicRegistration</key><string>NO</string>
+  <key>AudioServerPlugIn_MachServices</key><array/>
+</dict></plist>
