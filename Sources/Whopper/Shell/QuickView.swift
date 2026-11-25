@@ -135,12 +135,15 @@ struct QuickView: View {
                 Button { Shared.showWindow(page: .feature(.windows)) } label: { Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)) }
                     .buttonStyle(.plain).foregroundStyle(Brand.accentText).help("Open Windows settings") }
             HStack(spacing: 6) {
-                ForEach(Self.windowTiles, id: \.0) { a, glyph in
+                ForEach(Array(Self.windowTiles.enumerated()), id: \.element.0) { i, tile in
+                    let (a, glyph) = tile
                     Button { windows.runOnPreviousApp(a) } label: {
                         glyph.frame(maxWidth: .infinity).frame(height: 34)
                             .background(Brand.tile, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                             .foregroundStyle(Color.white)
-                    }.buttonStyle(.plain).help(windows.shortcut(a).map { "\(a.title)  \($0.display)" } ?? a.title)
+                    }.buttonStyle(.plain)
+                        .hoverTip(windows.shortcut(a).map { "\(a.title)  \($0.display)" } ?? a.title,
+                                  anchor: i < 2 ? .topLeading : (i >= Self.windowTiles.count - 2 ? .topTrailing : .top))
                 }
             }
             if !windows.trusted { Text("Needs Accessibility to move windows.").font(Brand.caption).foregroundStyle(.orange) }

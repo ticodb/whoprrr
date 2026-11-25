@@ -222,3 +222,39 @@ struct AutoScroll<Content: View>: View {
 }
 
 private let snapshotMode = ProcessInfo.processInfo.environment["SDC_SNAPSHOT"] != nil
+
+/// A tooltip drawn by SwiftUI. The system `.help` tooltip often never appears in a menu-bar panel (it is not the key
+/// window), so controls there use this instead. It shows after a short hover and sits above the view.
+struct HoverTip: ViewModifier {
+    var text: String
+    var anchor: Alignment = .top
+    @State private var show = false
+    @State private var pending: Task<Void, Never>?
+    func body(content: Content) -> some View {
+        content
+            .onHover { inside in
+                pending?.cancel()
+                if inside {
+                    pending = Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 300_000_000)
+                        if !Task.isCancelled { withAnimation(.easeOut(duration: 0.12)) { show = true } }
+                    }
+                } else { show = false }
+            }
+            .overlay(alignment: anchor) {
+                if show {
+                    Text(text).font(Brand.caption.weight(.medium)).foregroundStyle(.white).lineLimit(1).fixedSize()
+                        .padding(.horizontal, 9).padding(.vertical, 4)
+                        .background(Color.black.opacity(0.88), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.white.opacity(0.15)))
+                        .offset(y: -32)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+            }
+            .zIndex(show ? 1 : 0)
+    }
+}
+extension View {
+    func hoverTip(_ text: String, anchor: Alignment = .top) -> some View { modifier(HoverTip(text: text, anchor: anchor)) }
+}
