@@ -2,6 +2,12 @@
 
 All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://semver.org); betas are labelled `0.9.0 beta N`.
 
+## Unreleased
+
+### Added
+- **Gear scan and starter recipe**: first launch looks at the connected screens, audio devices and Logitech gear, labels each as tested, checked, untested or not available, and proposes one recipe to review. Nothing changes before Apply, and one button puts everything back. Also under Recipes, "Scan my gear".
+- **Fit report**: after setup, an optional one-press report of what worked on your gear (models and results only; the text is shown first).
+
 ## 0.9.0 beta 1: first public beta
 
 ### Added
