@@ -6,6 +6,8 @@ enum Brand {
     static let violet = Color(hex: 0x5B2BD8)
     static let violetBright = Color(hex: 0x7C4DFF)
     static let violetDeep = Color(hex: 0x221060)
+    /// Icons and glyphs that can be acted on: the same violet as an "on" switch, so they never read as dimmed.
+    static let glyph = violetBright
     static let patty = Color(hex: 0xFF4F81)
     static let bun = Color(hex: 0xFFC857)
     static let seed = Color(hex: 0xFFF0B8)
@@ -158,8 +160,8 @@ struct BrandCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8, content: content)
             .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.07)))
+            .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.11)))
     }
 }
 
@@ -197,8 +199,9 @@ struct BrandButtonStyle: ButtonStyle {
         configuration.label
             .font(.system(size: 14, weight: .semibold, design: .rounded))
             .padding(.horizontal, 13).padding(.vertical, 6)
-            .foregroundStyle(kind == .primary ? Color.white : Brand.accentText)
-            .background(kind == .primary ? AnyShapeStyle(Brand.violet) : AnyShapeStyle(Brand.violet.opacity(0.14)), in: Capsule())
+            .foregroundStyle(Color.white)
+            // Primary is the deeper violet, quiet is the "on switch" violet: both solid with white text, so neither reads as dimmed.
+            .background(kind == .primary ? Brand.violet : Brand.violetBright, in: Capsule())
             .opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.4)
     }
 }

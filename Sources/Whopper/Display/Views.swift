@@ -421,7 +421,7 @@ struct DisplayList: View {
         let canPick = d.hasEndpoint && reach == .responds
         return BrandCard {
             HStack(spacing: 10) {
-                Image(systemName: "display").font(.system(size: 18)).frame(width: 30).foregroundStyle(canPick ? Brand.accentText : Color.secondary)
+                Image(systemName: "display").font(.system(size: 18)).frame(width: 30).foregroundStyle(canPick ? Brand.glyph : Color.secondary)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(d.identity.productName).font(Brand.display(15, .semibold))
                     Text(detail(d, reach)).font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
