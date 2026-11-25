@@ -41,7 +41,7 @@ Each feature is a module you can switch off on the Features page. A switched-off
 
 - macOS 14.2 or newer (the system equalizer uses Core Audio process taps).
 - Apple Silicon for display control (it talks to the display through Apple Silicon's display interface).
-- Nothing else. No kernel extensions, no accounts, no network.
+- Nothing else. No kernel extensions, no accounts, no network beyond the daily update check.
 
 ## Install
 
@@ -54,7 +54,7 @@ Uninstall with `scripts/uninstall.sh` or see [docs/uninstall.md](docs/uninstall.
 
 ## Privacy
 
-Everything stays on your Mac. No analytics, no accounts, no network code. Clipboard history is stored locally and password-manager copies are skipped. Audio is processed live and never recorded. Details: [PRIVACY.md](PRIVACY.md).
+Everything stays on your Mac. No analytics, no accounts; the only network request is the daily update check, which you can turn off. Clipboard history is stored locally and password-manager copies are skipped. Audio is processed live and never recorded. Details: [PRIVACY.md](PRIVACY.md).
 
 ## Safety
 

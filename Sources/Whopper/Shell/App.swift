@@ -113,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let dir = ProcessInfo.processInfo.environment["WHOPPER_RENDER_ICON"] { BrandAssets.render(to: dir); NSApp.terminate(nil); return }
         // WHOPPER_NO_START=1 renders the UI without starting any background feature (used for screenshots).
         Shared.startRecipes()
+        UpdateController.shared.start()
         DemoData.seedAfterGearLoads()
         if let ap = ProcessInfo.processInfo.environment["WHOPPER_APPEARANCE"] { NSApp.appearance = NSAppearance(named: ap == "light" ? .aqua : .darkAqua) }
         if ProcessInfo.processInfo.environment["WHOPPER_NO_START"] != "1" { Shared.startFeatures() }
