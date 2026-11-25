@@ -87,4 +87,14 @@ final class GeometryTests: XCTestCase {
     func testDefaultShortcutsAreUnique() {
         XCTAssertTrue(WindowSettings().conflicts().isEmpty)
     }
+
+    func testDrawerDefaultsAndOldSettingsFiles() throws {
+        XCTAssertEqual(WindowSettings().drawer, [.leftHalf, .rightHalf, .firstThird, .centerThird, .lastThird, .center, .nextDisplay, .restore])
+        // A settings file saved before the drawer choice existed still loads, with the default set.
+        let old = try JSONDecoder().decode(WindowSettings.self, from: Data(#"{"shortcutsEnabled":true,"custom":{},"disabled":[],"gap":0,"cycleHalves":true,"snapByDrag":true}"#.utf8))
+        XCTAssertNil(old.drawerActions)
+        XCTAssertEqual(old.drawer, WindowSettings().drawer)
+        var s = WindowSettings(); s.drawerActions = ["maximize", "topLeft", "bogus"]
+        XCTAssertEqual(s.drawer, [.topLeft, .maximize])   // stable grouped order, unknown names ignored
+    }
 }

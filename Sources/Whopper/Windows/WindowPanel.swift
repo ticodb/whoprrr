@@ -21,6 +21,8 @@ struct WindowPanel: View {
                 }
             }
             Divider()
+            Text("Star the layouts you use most to put them in the menu-bar drawer (up to \(WindowSettings.drawerLimit)).")
+                .font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             ForEach(groups, id: \.self) { g in group(g) }
             Text("Defaults match Rectangle. Quit Rectangle first; two apps cannot own the same shortcut.")
                 .font(Brand.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -63,6 +65,9 @@ struct WindowPanel: View {
 
     private func row(_ a: WindowAction) -> some View {
         HStack(spacing: 6) {
+            let on = m.inDrawer(a)
+            Button { m.setInDrawer(a, !on) } label: { Image(systemName: on ? "star.fill" : "star").foregroundStyle(on ? Brand.accentText : Color.secondary) }
+                .buttonStyle(.plain).disabled(!on && m.drawerFull).hoverTip(on ? "Remove from the menu-bar drawer" : "Show in the menu-bar drawer")
             Button { m.run(a) } label: { Text(a.title).frame(maxWidth: .infinity, alignment: .leading) }
                 .buttonStyle(.plain).help("Run on the front window")
             status(a)

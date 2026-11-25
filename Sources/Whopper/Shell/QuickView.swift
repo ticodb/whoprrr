@@ -117,35 +117,30 @@ struct QuickView: View {
         }
     }
 
-    /// Left and right half, the three thirds, center, next display, restore.
-    private static let windowTiles: [(WindowAction, AnyView)] = [
-        (.leftHalf, AnyView(ZoneGlyph(x: 0, width: 0.5))),
-        (.rightHalf, AnyView(ZoneGlyph(x: 0.5, width: 0.5))),
-        (.firstThird, AnyView(ZoneGlyph(x: 0, width: 1.0 / 3))),
-        (.centerThird, AnyView(ZoneGlyph(x: 1.0 / 3, width: 1.0 / 3))),
-        (.lastThird, AnyView(ZoneGlyph(x: 2.0 / 3, width: 1.0 / 3))),
-        (.center, AnyView(ZoneGlyph(x: 0.25, width: 0.5, y: 0.2, height: 0.6))),
-        (.nextDisplay, AnyView(Image(systemName: "display.2").font(.system(size: 16)))),
-        (.restore, AnyView(Image(systemName: "arrow.uturn.backward").font(.system(size: 16)))),
-    ]
-
+    /// The layouts the user picked in Settings > Windows (a sensible default set until then), eight to a line.
     private var windowsRow: some View {
-        BrandCard {
+        let tiles = windows.settings.drawer
+        let rows = stride(from: 0, to: tiles.count, by: 8).map { Array(tiles[$0..<min($0 + 8, tiles.count)]) }
+        return BrandCard {
             HStack { Text("Window").font(Brand.display(15, .semibold)); Spacer()
                 Button { Shared.showWindow(page: .feature(.windows)) } label: { Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)) }
                     .buttonStyle(.plain).foregroundStyle(Brand.accentText).help("Open Windows settings") }
-            HStack(spacing: 6) {
-                ForEach(Array(Self.windowTiles.enumerated()), id: \.element.0) { i, tile in
-                    let (a, glyph) = tile
-                    Button { windows.runOnPreviousApp(a) } label: {
-                        glyph.frame(maxWidth: .infinity).frame(height: 34)
-                            .background(Brand.tile, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .foregroundStyle(Color.white)
-                    }.buttonStyle(.plain)
-                        .hoverTip(windows.shortcut(a).map { "\(a.title)  \($0.display)" } ?? a.title,
-                                  anchor: i < 2 ? .topLeading : (i >= Self.windowTiles.count - 2 ? .topTrailing : .top))
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 6) {
+                    ForEach(Array(row.enumerated()), id: \.element) { i, a in
+                        Button { windows.runOnPreviousApp(a) } label: {
+                            WindowGlyph(action: a).frame(maxWidth: .infinity).frame(height: 34)
+                                .background(Brand.tile, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .foregroundStyle(Color.white)
+                        }.buttonStyle(.plain)
+                            .hoverTip(windows.shortcut(a).map { "\(a.title)  \($0.display)" } ?? a.title,
+                                      anchor: i < 2 ? .topLeading : (i >= row.count - 2 && row.count > 4 ? .topTrailing : .top))
+                    }
+                    // Keep a short last line the same tile width as a full one.
+                    ForEach(0..<(row.count < 8 && rows.count > 1 ? 8 - row.count : 0), id: \.self) { _ in Color.clear.frame(maxWidth: .infinity).frame(height: 34) }
                 }
             }
+            if tiles.isEmpty { Text("No layouts picked. Star some in Settings > Windows.").font(Brand.caption).foregroundStyle(.secondary) }
             if !windows.trusted { Text("Needs Accessibility to move windows.").font(Brand.caption).foregroundStyle(.orange) }
         }
     }

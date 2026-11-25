@@ -36,6 +36,13 @@ final class WindowModel: ObservableObject {
     }
     func reset(_ a: WindowAction) { settings.custom[a.rawValue] = nil; settings.disabled.remove(a.rawValue) }
     func isCustomised(_ a: WindowAction) -> Bool { settings.custom[a.rawValue] != nil || settings.disabled.contains(a.rawValue) }
+    func inDrawer(_ a: WindowAction) -> Bool { settings.drawer.contains(a) }
+    var drawerFull: Bool { settings.drawer.count >= WindowSettings.drawerLimit }
+    func setInDrawer(_ a: WindowAction, _ on: Bool) {
+        var set = settings.drawerActions ?? WindowSettings.drawerDefault
+        if on { guard !drawerFull else { return }; set.insert(a.rawValue) } else { set.remove(a.rawValue) }
+        settings.drawerActions = set
+    }
     func run(_ a: WindowAction) { _ = manager.perform(a) }
 
     /// The app the user was in before our panel opened.
