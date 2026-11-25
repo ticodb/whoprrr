@@ -6,8 +6,8 @@ enum Brand {
     static let violet = Color(hex: 0x5B2BD8)
     static let violetBright = Color(hex: 0x7C4DFF)
     static let violetDeep = Color(hex: 0x221060)
-    /// Icons and glyphs that can be acted on: the same violet as an "on" switch, so they never read as dimmed.
-    static let glyph = violetBright
+    /// Icon tiles: the "on switch" violet as a solid fill with a white glyph, so they match the buttons and never read as dimmed.
+    static let tile = violetBright
     static let patty = Color(hex: 0xFF4F81)
     static let bun = Color(hex: 0xFFC857)
     static let seed = Color(hex: 0xFFF0B8)

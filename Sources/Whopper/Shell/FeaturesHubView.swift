@@ -13,8 +13,8 @@ struct FeaturesHubView: View {
                 BrandCard {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: f.symbol).font(.system(size: 15, weight: .semibold)).frame(width: 24, height: 24)
-                            .foregroundStyle(f.isBuilt ? Brand.glyph : Color.secondary)
-                            .background(Brand.violet.opacity(f.isBuilt ? 0.14 : 0.05), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .foregroundStyle(f.isBuilt ? Color.white : Color.secondary)
+                            .background(f.isBuilt ? Brand.tile : Brand.violet.opacity(0.05), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                         VStack(alignment: .leading, spacing: 2) {
                             Text(f.title).font(Brand.display(15, .semibold))
                             Text(f.summary).font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

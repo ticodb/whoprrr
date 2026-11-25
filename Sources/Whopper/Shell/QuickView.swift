@@ -49,7 +49,7 @@ struct QuickView: View {
             Wordmark(size: 24)
             Spacer()
             Button { Shared.showWindow() } label: { Image(systemName: "gearshape").font(.system(size: 16, weight: .medium)) }
-                .buttonStyle(.plain).help("Settings (⌘,)").foregroundStyle(Brand.glyph)
+                .buttonStyle(.plain).help("Settings (⌘,)").foregroundStyle(Brand.accentText)
         }
     }
 
@@ -133,13 +133,13 @@ struct QuickView: View {
         BrandCard {
             HStack { Text("Window").font(Brand.display(15, .semibold)); Spacer()
                 Button { Shared.showWindow(page: .feature(.windows)) } label: { Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)) }
-                    .buttonStyle(.plain).foregroundStyle(Brand.glyph).help("Open Windows settings") }
+                    .buttonStyle(.plain).foregroundStyle(Brand.accentText).help("Open Windows settings") }
             HStack(spacing: 6) {
                 ForEach(Self.windowTiles, id: \.0) { a, glyph in
                     Button { windows.runOnPreviousApp(a) } label: {
                         glyph.frame(maxWidth: .infinity).frame(height: 34)
-                            .background(Brand.violet.opacity(0.22), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .foregroundStyle(Brand.glyph)
+                            .background(Brand.tile, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .foregroundStyle(Color.white)
                     }.buttonStyle(.plain).help(a.title)
                 }
             }
@@ -223,7 +223,7 @@ struct QuickRow<Trailing: View>: View {
         BrandCard {
             HStack(spacing: 12) {
                 Image(systemName: symbol).font(.system(size: 16, weight: .medium)).frame(width: 36, height: 36)
-                    .foregroundStyle(Brand.glyph).background(Brand.violet.opacity(0.22), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .foregroundStyle(Color.white).background(Brand.tile, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).font(Brand.display(15, .semibold)).lineLimit(1)
                     Text(value).font(Brand.caption).foregroundStyle(.secondary).lineLimit(2)
