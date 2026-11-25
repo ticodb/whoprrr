@@ -140,7 +140,7 @@ struct QuickView: View {
                         glyph.frame(maxWidth: .infinity).frame(height: 34)
                             .background(Brand.tile, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                             .foregroundStyle(Color.white)
-                    }.buttonStyle(.plain).help(a.title)
+                    }.buttonStyle(.plain).help(windows.shortcut(a).map { "\(a.title)  \($0.display)" } ?? a.title)
                 }
             }
             if !windows.trusted { Text("Needs Accessibility to move windows.").font(Brand.caption).foregroundStyle(.orange) }
