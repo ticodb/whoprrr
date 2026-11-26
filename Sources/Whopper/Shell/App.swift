@@ -79,6 +79,7 @@ enum Shared {
         // Anything still unsaved from last time was left on the stove: remember that, and show the bar as soon as the window opens.
         recipes.noteLeaving()
         saveBar.start()
+        PicklsssController.shared.start()
         gearTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { _ in
             MainActor.assumeIsolated {
                 let now = Gear.current()
@@ -144,6 +145,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Shared.input.shutdown()
     }
 
+    /// A `.whoprrr-setup` file opened from Finder or dropped on the app. The checker runs every time; opening is free to look at.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for u in urls where u.pathExtension == SharedSetupFile.fileExtension { PicklsssController.shared.openFile(u) }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)      // menu bar only, no Dock icon
         // WHOPPER_RENDER_ICON=/dir writes the brand artwork (iconset, icns, PNGs) and exits. See docs/brand.
@@ -155,6 +161,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let ap = ProcessInfo.processInfo.environment["WHOPPER_APPEARANCE"] { NSApp.appearance = NSAppearance(named: ap == "light" ? .aqua : .darkAqua) }
         if ProcessInfo.processInfo.environment["WHOPPER_NO_START"] != "1" { Shared.startFeatures() }
         LicenseController.shared.start()
+        #if DEBUG
+        // Debug only: open a file at launch, as if it had been double-clicked (scripts cannot drive Finder).
+        if let f = ProcessInfo.processInfo.environment["WHOPRRR_OPEN_FILE"] { DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { PicklsssController.shared.openFile(URL(fileURLWithPath: f)) } }
+        #endif
         // First run: open the window on the gear scan, which proposes a starter recipe and then leads to Permissions.
         // Without a valid pass the window opens on "Enter your key" instead, and the gear scan follows the activation.
         let welcomed = "gg.tico.whoprrr.welcomed"

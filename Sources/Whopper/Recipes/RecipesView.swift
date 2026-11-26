@@ -11,6 +11,8 @@ struct RecipesView: View {
     @State private var creating = false
     @State private var renaming: Recipe?
     @State private var deleting: Recipe?
+    @State private var flagging: Recipe?
+    @ObservedObject private var picklsss = PicklsssController.shared
     private let timer = Timer.publish(every: 3, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -37,6 +39,9 @@ struct RecipesView: View {
         .confirmationDialog("Delete “\(deleting?.name ?? "")”?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { r in
             Button("Delete recipe", role: .destructive) { recipes.delete(r.id) }
         } message: { _ in Text("Your current settings are not changed.") }
+        .confirmationDialog("Tell the shelf something is off with “\(flagging?.name ?? "")”?", isPresented: Binding(get: { flagging != nil }, set: { if !$0 { flagging = nil } }), presenting: flagging) { r in
+            Button("Something is off") { flag(r) }
+        } message: { _ in Text("It carries no text and no way to say who you are. Three different people saying so take it off the shelf. Your copy is not touched.") }
     }
 
     private var gearCard: some View {
@@ -71,6 +76,7 @@ struct RecipesView: View {
                         if isActive { StatusChip(text: "Active", tone: .good) }
                     }
                     Text(summary(r)).font(Brand.caption).foregroundStyle(.secondary)
+                    provenance(r)
                     if r.devices.isEmpty { Text("Not tied to any gear").font(Brand.caption).foregroundStyle(.secondary) }
                     FlowChips(items: r.devices.map { d in (d.symbol, d.name, g.present.contains(d)) })
                 }
@@ -85,8 +91,18 @@ struct RecipesView: View {
                             } else {
                                 Button("Go back to the version before the last save") {}.disabled(true)
                             }
+                            if recipes.canGoToAuthorsOriginal(r.id), let o = r.authorsOriginal {
+                                Button("Go back to \(o.madeBy.flatMap { $0.isEmpty ? nil : "\($0)’s" } ?? "the author’s") original, as fitted to my gear") { goToOriginal(r) }
+                            }
                             Button("Update gear to what is connected") { recipes.setDevices(r.id, connected) }
                             Button("Rename or change icon…") { renaming = r }
+                            if !r.skipped.isEmpty {
+                                Menu("Switch on a skipped line") { ForEach(r.skipped) { l in Button("\(PicklsssWords.partTitle(l.part)): \(l.title)") { switchOn(l, in: r) } } }
+                            }
+                            Divider()
+                            Button("Share as a picklsss…") { picklsss.sharing = ShareSession(controller: picklsss, recipe: r, mode: .share) }
+                            Button("Send as a file…") { picklsss.sharing = ShareSession(controller: picklsss, recipe: r, mode: .file) }
+                            if let t = picklsss.takeRecord(forRecipe: r.id) { Button("Something is off with this shared setup…") { _ = t; flagging = r } }
                             Divider()
                             Button("Delete…", role: .destructive) { deleting = r }
                         } label: { Image(systemName: "ellipsis.circle").font(.system(size: 17)) }.menuStyle(.borderlessButton).fixedSize()
@@ -105,6 +121,51 @@ struct RecipesView: View {
 
     private func goBack(_ r: Recipe) {
         if let failed = recipes.goBack(r.id), !failed.isEmpty { recipes.notice = "Went back, except \(failed.joined(separator: ", "))" }
+    }
+
+    /// Where a recipe came from, and what is waiting on it: "from lucia.r in Picklsss", skipped lines, shared and newer than shared.
+    @ViewBuilder private func provenance(_ r: Recipe) -> some View {
+        if let t = picklsss.takeRecord(forRecipe: r.id) {
+            Text("from \(t.handle) in Picklsss (setups other people shared)").font(Brand.caption).foregroundStyle(.secondary).lineLimit(2)
+        } else if r.authorsOriginal != nil {
+            Text("from a shared setup file").font(Brand.caption).foregroundStyle(.secondary)
+        }
+        if !r.skipped.isEmpty {
+            Text("\(r.skipped.count) line\(r.skipped.count == 1 ? "" : "s") waiting: \(r.skipped.map { $0.title }.prefix(2).joined(separator: ", "))\(r.skipped.count > 2 ? "…" : "")")
+                .font(Brand.caption).foregroundStyle(StatusChip.Tone.warn.text).lineLimit(2)
+        }
+        if let rec = picklsss.sharedRecord(forRecipe: r.id) {
+            HStack(spacing: 8) {
+                StatusChip(text: rec.isPublic ? "Shared" : PicklsssWords.state(ShelfState(rawValue: rec.state) ?? .held), tone: rec.isPublic ? .good : .warn)
+                if picklsss.isNewerThanShared(rec) {
+                    Text("Your copy is newer than the shared one").font(Brand.caption).foregroundStyle(.secondary)
+                    Button("Share the update") { picklsss.sharing = ShareSession(controller: picklsss, recipe: r, mode: .update(rec)) }.buttonStyle(.brandQuiet)
+                }
+            }
+        }
+    }
+
+    private func goToOriginal(_ r: Recipe) {
+        if let failed = recipes.goToAuthorsOriginal(r.id), !failed.isEmpty { recipes.notice = "Went back, except \(failed.joined(separator: ", "))" }
+    }
+
+    /// A line that was switched off for this Mac (a plugin was missing, a permission denied) switched on later.
+    private func switchOn(_ l: SkippedLine, in r: Recipe) {
+        let env = picklsss.receiverEnvironment()
+        guard let out = SharedSetupFit.switchOn(l.id, in: r, for: env) else {
+            recipes.notice = "“\(l.title)” cannot be switched on yet: \(l.reason)"; return
+        }
+        recipes.replaceTaken(out.recipe)
+        if recipes.activeID == r.id, !recipes.isModified(r.id) { recipes.apply(r.id) }
+        recipes.notice = "Switched on: \(l.title)."
+    }
+
+    private func flag(_ r: Recipe) {
+        guard let t = picklsss.takeRecord(forRecipe: r.id) else { return }
+        Task {
+            do { try await picklsss.withPass { c, p in try await c.flag(pass: p, id: t.picklsssId) }; recipes.notice = "Thank you. The shelf knows something is off with “\(r.name)”." }
+            catch let e as ShelfFailure { recipes.notice = e.message } catch { recipes.notice = ShelfFailure.offline.message }
+        }
     }
 
     private func summary(_ r: Recipe) -> String {

@@ -56,6 +56,18 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSMicrophoneUsageDescription</key><string>Whoprrr reads your microphone so it can apply effects and route it to the virtual mic. Audio is processed live and never recorded or sent anywhere.</string>
   <key>NSCameraUseContinuityCameraDeviceType</key><true/>
   <key>NSHighResolutionCapable</key><true/>
+  <key>CFBundleDocumentTypes</key><array><dict>
+    <key>CFBundleTypeName</key><string>Whoprrr shared setup</string>
+    <key>CFBundleTypeRole</key><string>Viewer</string>
+    <key>LSHandlerRank</key><string>Owner</string>
+    <key>LSItemContentTypes</key><array><string>gg.tico.whoprrr.setup</string></array>
+  </dict></array>
+  <key>UTExportedTypeDeclarations</key><array><dict>
+    <key>UTTypeIdentifier</key><string>gg.tico.whoprrr.setup</string>
+    <key>UTTypeDescription</key><string>Whoprrr shared setup</string>
+    <key>UTTypeConformsTo</key><array><string>public.json</string></array>
+    <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>whoprrr-setup</string></array></dict>
+  </dict></array>
   <key>SUFeedURL</key><string>${SPARKLE_FEED_URL}</string>
   <key>SUPublicEDKey</key><string>${SPARKLE_PUBLIC_KEY}</string>
   <key>SUEnableAutomaticChecks</key><true/>

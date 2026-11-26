@@ -70,6 +70,9 @@ public enum PicklsssWords {
         return s
     }
 
+    /// A cook's own total: "No keeps yet", "1 keep", "23 keeps".
+    public static func cookKeeps(_ n: Int) -> String { n == 0 ? "No keeps yet" : n == 1 ? "1 keep" : "\(n) keeps" }
+
     public static func kitchenDays(_ n: Int) -> String { n == 1 ? "1 kitchen day" : "\(n) kitchen days" }
 
     /// The five states in plain words, for a cook's own list.

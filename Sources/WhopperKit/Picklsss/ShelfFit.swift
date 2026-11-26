@@ -42,7 +42,7 @@ public enum ShelfRanking {
         }
     }
 
-    static func same(_ a: String, _ b: String) -> Bool { a.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(b.trimmingCharacters(in: .whitespaces)) == .orderedSame }
+    public static func same(_ a: String, _ b: String) -> Bool { a.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(b.trimmingCharacters(in: .whitespaces)) == .orderedSame }
 
     public static func summary(_ card: ShelfCard, gear mine: [DeviceSignature]) -> Summary {
         let fits = card.gear.map { g -> GearFit in

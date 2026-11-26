@@ -103,9 +103,10 @@ enum Starter {
 
 /// Sends a fit report, and only when the user presses Send. One request, no retries, no identifiers.
 enum FitSender {
-    static let endpoint = URL(string: "https://whoprrr.app/api/fit")!
+    /// On the same server the licence code talks to (whoprrr.app, or a local test server in a debug build).
+    @MainActor static var endpoint: URL { LicenseController.shared.server.appendingPathComponent("api/fit") }
 
-    static func send(_ body: Data) async -> Bool {
+    @MainActor static func send(_ body: Data) async -> Bool {
         var req = URLRequest(url: endpoint, timeoutInterval: 8)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")

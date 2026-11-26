@@ -3,7 +3,7 @@ import WhopperKit
 
 /// The pages of the main window.
 enum AppPage: Hashable {
-    case feature(Feature), features, permissions, recipes, about, welcome
+    case feature(Feature), features, permissions, recipes, about, welcome, picklsss, extras
 
     init?(name: String) {
         switch name {
@@ -12,6 +12,8 @@ enum AppPage: Hashable {
         case "recipes": self = .recipes
         case "about": self = .about
         case "welcome": self = .welcome
+        case "picklsss": self = .picklsss
+        case "extras": self = .extras
         default:
             guard let f = Feature(rawValue: name) else { return nil }
             self = .feature(f)
@@ -66,6 +68,8 @@ struct PageContent: View {
         case .recipes: RecipesView()
         case .about: AboutView()
         case .welcome: WelcomeView()
+        case .picklsss: PicklsssView()
+        case .extras: ExtrasView()
         }
     }
 }

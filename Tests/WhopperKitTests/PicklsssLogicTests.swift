@@ -280,6 +280,9 @@ final class ShareFieldTests: XCTestCase {
         var b = Personal.setup(); b.line = "Another line"
         XCTAssertEqual(ShareDigest.of(a), ShareDigest.of(Personal.setup().json))
         XCTAssertNotEqual(ShareDigest.of(a), ShareDigest.of(b.json))
+        XCTAssertEqual(ShareDigest.of(setup: b), ShareDigest.of(setup: Personal.setup()), "a new one-line description is not a change to the setup")
+        var c = Personal.setup(); c.settings["windows"] = .object(["gap": .int(99)])
+        XCTAssertNotEqual(ShareDigest.of(setup: c), ShareDigest.of(setup: Personal.setup()))
     }
 }
 
@@ -387,3 +390,19 @@ final class TakeReportTests: XCTestCase {
     }
 }
 
+
+final class RequirementsTests: XCTestCase {
+    func testRequirementsAreListedBeforeAnythingStarts() {
+        let need = SharedRequirements(plugins: ["Pro-Q 3", "TDR Nova"], minMacOS: "14.2", permissions: ["microphone", "accessibility", "camera", "bogus"])
+        let env = ReceiverEnvironment(plugins: [Personal.proQ], macOS: "14.1", permissions: [.microphone: .granted, .accessibility: .denied])
+        let rows = Requirements.rows(need, env: env)
+        XCTAssertEqual(rows.map(\.status), [.ready, .missing, .missing, .ready, .missing, .ask])
+        XCTAssertEqual(rows[1].pluginName, "TDR Nova"); XCTAssertTrue(rows[1].detail.contains("never installs plugins"))
+        XCTAssertEqual(rows.count, 6, "a permission this version does not know is not listed")
+    }
+    func testVersionsCompareNumbers() {
+        XCTAssertTrue(Requirements.atLeast("27.2", "14")); XCTAssertTrue(Requirements.atLeast("14.2", "14.2")); XCTAssertFalse(Requirements.atLeast("14.1", "14.2"))
+        XCTAssertFalse(Requirements.atLeast("9.9", "10")); XCTAssertTrue(Requirements.atLeast("15", "14.9"))
+    }
+    func testNothingNeededMeansNoRows() { XCTAssertEqual(Requirements.rows(SharedRequirements(), env: ReceiverEnvironment()), []) }
+}

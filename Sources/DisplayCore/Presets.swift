@@ -23,6 +23,12 @@ public struct Preset: Codable, Identifiable, Equatable, Sendable {
         self.maximums = Dictionary(uniqueKeysWithValues: maximums.map { ($0.key.key, $0.value) })
         self.notes = notes
     }
+
+    /// A preset whose values are already named by their control keys ("brightness", "colorPreset"…), as a shared setup carries them.
+    public init(id: UUID = UUID(), name: String, createdAt: Date = Date(), identity: DisplayIdentity, valuesByKey: [String: Int], notes: String = "") {
+        self.id = id; self.name = name; self.createdAt = createdAt; self.identity = identity
+        self.values = valuesByKey; self.maximums = [:]; self.notes = notes
+    }
 }
 
 struct PresetFile: Codable {
@@ -44,6 +50,10 @@ public final class PresetStore: @unchecked Sendable {
     public init(url: URL) { self.url = url }
 
     public static func defaultURL() -> URL {
+        // WHOPPER_DATA_DIR points the whole app at another folder (tests, screenshots), so a run never reads or writes the real presets.
+        if let d = ProcessInfo.processInfo.environment["WHOPPER_DATA_DIR"], !d.isEmpty {
+            return URL(fileURLWithPath: d, isDirectory: true).appendingPathComponent("SamsungDisplayControl", isDirectory: true).appendingPathComponent("presets.json")
+        }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return base.appendingPathComponent("SamsungDisplayControl", isDirectory: true).appendingPathComponent("presets.json")
     }
