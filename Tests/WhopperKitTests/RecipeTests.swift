@@ -14,6 +14,17 @@ final class FakeSurface: RecipeSurface {
     }
 }
 
+/// A surface whose settings are a set written in whatever order it happens to hold, like a file saved by an earlier version.
+@MainActor
+final class SetSurface: RecipeSurface {
+    let recipeKey = "tiles", recipeTitle = "Tiles"
+    var order: [String]
+    init(_ order: [String]) { self.order = order }
+    func captureRecipeData() -> Data? { RecipeJSON.encode(order) }
+    func applyRecipeData(_ data: Data) -> Bool { guard let a = RecipeJSON.decode([String].self, from: data) else { return false }; order = a; return true }
+    func canonicalRecipeData(_ data: Data) -> Data { RecipeJSON.decode([String].self, from: data).flatMap { RecipeJSON.encode($0.sorted()) } ?? data }
+}
+
 @MainActor
 final class RecipeTests: XCTestCase {
     func tmp(_ n: String) -> URL { FileManager.default.temporaryDirectory.appendingPathComponent("whoprrr-\(UUID().uuidString)-\(n).json") }
@@ -124,5 +135,17 @@ final class RecipeTests: XCTestCase {
         XCTAssertTrue(lib.presets(for: "windows").isEmpty)
         lib.delete(lib.presets(for: "audio.mic")[0].id, for: "audio.mic")
         XCTAssertEqual(lib.presets(for: "audio.mic").map(\.name), ["Podcast"])
+    }
+
+    func testEqualSettingsInDifferentBytesAreNotAChange() {
+        let (store, _, _) = makeStore(tmp("canon"))
+        let tiles = SetSurface(["left", "right", "max"])
+        store.register(tiles)
+        let r = store.create(name: "Desk", symbol: "house", includes: ["tiles"], devices: [], autoApply: false)
+        XCTAssertFalse(store.isModified(r.id))
+        tiles.order = ["max", "left", "right"]          // the same set, as another launch would write it
+        XCTAssertFalse(store.isModified(r.id), "the same settings in another order are not a change")
+        tiles.order = ["max", "left"]                   // a real change
+        XCTAssertTrue(store.isModified(r.id))
     }
 }

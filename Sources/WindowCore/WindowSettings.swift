@@ -15,6 +15,20 @@ public struct WindowSettings: Codable, Equatable, Sendable {
     public static let drawerLimit = 16
     public init() {}
 
+    private enum CodingKeys: String, CodingKey { case shortcutsEnabled, custom, disabled, gap, cycleHalves, snapByDrag, drawerActions }
+    /// Sets are written sorted. A set's own order changes from one launch to the next, and recipes compare settings by their
+    /// bytes, so an unsorted set made unchanged window settings look changed after a relaunch.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(shortcutsEnabled, forKey: .shortcutsEnabled)
+        try c.encode(custom, forKey: .custom)
+        try c.encode(disabled.sorted(), forKey: .disabled)
+        try c.encode(gap, forKey: .gap)
+        try c.encode(cycleHalves, forKey: .cycleHalves)
+        try c.encode(snapByDrag, forKey: .snapByDrag)
+        try c.encodeIfPresent(drawerActions?.sorted(), forKey: .drawerActions)
+    }
+
     /// The drawer's layouts in a stable, grouped order.
     public var drawer: [WindowAction] {
         let picked = drawerActions ?? Self.drawerDefault
