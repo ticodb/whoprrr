@@ -199,6 +199,13 @@ final class ShareSession: ObservableObject, Identifiable {
             panel.nameFieldStringValue = fileName
             panel.allowedContentTypes = []
             panel.canCreateDirectories = true
+            // The person chooses where it goes, because the next thing they do is attach it or drop it somewhere. The first time,
+            // start in Downloads; after that macOS reopens the folder they used last.
+            let asked = "picklsss.fileSaveAsked"
+            if !UserDefaults.standard.bool(forKey: asked) {
+                panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+                UserDefaults.standard.set(true, forKey: asked)
+            }
             guard panel.runModal() == .OK, let url = panel.url else { return }
             do { try data.write(to: url, options: .atomic); savedFile = url; step = .result } catch { message = "The file could not be saved there." }
         }
