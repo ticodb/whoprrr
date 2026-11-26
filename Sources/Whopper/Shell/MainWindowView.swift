@@ -9,8 +9,13 @@ struct MainWindowView: View {
     @EnvironmentObject var input: InputController
     @EnvironmentObject var nav: WindowNav
     @State private var missing = 0
+    @ObservedObject private var license = LicenseController.shared
 
     var body: some View {
+        if license.isLicensed { app } else { LicenseView() }
+    }
+
+    private var app: some View {
         HStack(spacing: 0) {
             sidebar.frame(width: 232)
             Divider()

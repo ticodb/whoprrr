@@ -5,6 +5,16 @@ import AppKit
 struct AboutView: View {
     @State private var copied = false
 
+    /// "Activated on this Mac until 25 December 2026 · Mac 2 of 3". Never the key: the app does not keep it.
+    private var activationLine: String {
+        let license = LicenseController.shared
+        if license.skipped { return "Development build: the key check is skipped." }
+        guard case .licensed(let p) = license.state else { return "This Mac is not activated." }
+        let until = p.expires.formatted(date: .long, time: .omitted)
+        let place = license.stored.slot.flatMap { s in license.stored.of.map { "  ·  Mac \(s) of \($0)" } } ?? ""
+        return "This Mac is activated. Its pass is good until \(until) and is refreshed by itself\(place)."
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 16) {
@@ -33,8 +43,13 @@ struct AboutView: View {
             }
 
             BrandCard {
+                SectionLabel("Activation")
+                Text(activationLine).font(Brand.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+
+            BrandCard {
                 SectionLabel("Privacy")
-                Text("Everything stays on this Mac. Whoprrr has no account and no analytics. It makes two kinds of network request: a daily check for a newer version (whoprrr.app), which you can turn off in Features, and a fit report, sent only if you press Send after a gear scan. Clipboard history, rules, recipes and presets are plain files in the data folder; audio is processed live and never recorded. Otherwise it opens a web page only when you press a button above.")
+                Text("Everything stays on this Mac. Whoprrr has no account and no analytics. It talks to whoprrr.app for three things: a daily check for a newer version, which you can turn off in Features; activation, which sends your key once and then quietly refreshes this Mac’s pass about once a week; and a fit report, sent only if you press Send after a gear scan. Clipboard history, rules, recipes and presets are plain files in the data folder; audio is processed live and never recorded. Otherwise it opens a web page only when you press a button above.")
                     .font(Brand.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
 
