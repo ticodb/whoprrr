@@ -5,9 +5,15 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 ## Unreleased
 
 ### Added
+- **Recipes behave like documents**: while the active recipe differs from your settings, the main window shows a save bar on every page (Save, Save as new recipe, Put back). It waits until you have left the settings alone for 2 seconds; until then only a small "Cookin'" label shows. After saving there is a confirmation with Undo, and every recipe keeps the version from before its last save: "Go back to the version before…" in its menu swaps the two, so going back can itself be undone.
+- **Unsaved changes are never dropped**: closing the window asks nothing and the change stays live, also after a quit. The next time the window opens it lands on the page that changed with a reminder, until you save or put back. When gear changes would switch recipes automatically and the current one has unsaved changes, Whoprrr asks first (save then switch, switch without saving, or stay).
+- **Gear is stored by role and model** (for example microphone, "RØDE PodMic USB") as well as what this Mac needs to recognise it, so a recipe file makes sense on another Mac. `recipes.json` now has a `formatVersion`. An older file is converted on first launch and the original is kept beside it as `recipes.backup-v1.json`; a file that cannot be read is kept aside as `.bad` and never overwritten.
 - **Gear scan and starter recipe**: first launch looks at the connected screens, audio devices and Logitech gear, labels each as tested, checked, untested or not available, and proposes one recipe to review. Nothing changes before Apply, and one button puts everything back. Also under Recipes, "Scan my gear".
 - **Activation**: Whoprrr asks for your key on first launch and keeps a pass for this Mac. It is checked offline at every launch and refreshed by itself about once a week; features stay off without a valid pass. Debug builds can skip the check (`WHOPPER_LICENSE=skip`) or point at a test server.
 - **Fit report**: after setup, an optional one-press report of what worked on your gear (models and results only; the text is shown first).
+
+### Changed
+- "Update with my current settings" in a recipe's menu and the "Active, changed" chip are replaced by the save bar.
 
 ## 0.9.0 beta 1: first public beta
 

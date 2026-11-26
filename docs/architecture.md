@@ -28,7 +28,7 @@ One Swift package, one menu-bar app. Each feature is a library with **no UI** an
 - **System audio:** process tap + private aggregate device → IOProc → EQ → plugin rack → dynamics → output device.
 - **Microphone:** aggregate (real mic + Whoprrr Mic) → IOProc → gain/high-pass/EQ/gate/compressor/plugins → the virtual device, which every app reads.
 - **Plugins:** `PluginRack` loads Audio Units (out of process by default) into an `AVAudioEngine` in manual real-time rendering mode, rebuilt off-thread when the chain changes.
-- **Recipes:** every settings surface implements `RecipeSurface` (capture/apply as JSON). `RecipeStore` snapshots and applies surfaces, tracks which recipe is active and whether it has drifted, and picks one when gear changes.
+- **Recipes:** every settings surface implements `RecipeSurface` (capture/apply as JSON). `RecipeStore` snapshots and applies surfaces, tracks which recipe is active and whether it has drifted, and picks one when gear changes. A recipe behaves like a document: `SaveBarController` (injectable scheduler, so the 2 second wait is testable) decides when the window shows "Cookin'", the save bar or the confirmation; a save keeps one previous version that "go back" swaps; changes left unsaved are remembered across quits; an automatic switch over unsaved changes asks first (`AutoSwitchDecision`). `recipes.json` carries a `formatVersion`; older files are converted on first launch with the original kept beside it (`RecipeFileStore`).
 
 ## Private or fragile interfaces
 
