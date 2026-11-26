@@ -66,6 +66,10 @@ enum DebugDriver {
         case "match": c.take?.toMatch()
         case "review": c.take?.toReview()
         case "toggle": c.take?.toggle(str("line"), on: s["on"] as? Bool ?? true)
+        case "toggle-part": c.take?.toggle(s["lines"] as? [String] ?? [], on: s["on"] as? Bool ?? true)
+        case "open-groups":
+            if let t = c.take { t.openGroups = Set((s["ids"] as? [String]) ?? (t.grouping?.stays.map(\.id) ?? [])) }
+            emit("groups: \(c.take?.grouping?.stays.map { "\($0.title) [\($0.lines.count)]" } ?? [])")
         case "choose":
             if let t = c.take, let i = s["index"] as? Int {
                 let m = str("model"); t.choose(authorIndex: i, device: t.env.gear.first { $0.model == m })

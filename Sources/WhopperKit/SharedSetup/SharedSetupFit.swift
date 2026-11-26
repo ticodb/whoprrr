@@ -86,6 +86,17 @@ public enum LineKind: Equatable, Sendable {
     case display
 }
 
+/// Why a line is off, when the cause is something a screen can name: one of the author's devices is not connected, a plugin is
+/// not installed, or the person switched the line off. Nothing else is named here; any other reason is just its sentence.
+public enum OffCause: Equatable, Sendable {
+    /// No device on this Mac stands for the author's device at this index.
+    case gearMissing(Int)
+    /// Every plugin the line needs that is not installed (by name).
+    case pluginsMissing([String])
+    /// The person switched it off on the review.
+    case person
+}
+
 public struct SetupLine: Equatable, Identifiable, Sendable {
     /// Stable: "audio.equalizer", "keys.rules"…
     public var id: String
@@ -93,6 +104,8 @@ public struct SetupLine: Equatable, Identifiable, Sendable {
     public var kind: LineKind
     public var title: String
     public var state: LineState
+    /// Set for an off line whose cause is one of `OffCause`; nil for every other reason, which is only the sentence in `state`.
+    public var cause: OffCause? = nil
 }
 
 public struct FitPlan: Equatable, Sendable {
@@ -128,6 +141,9 @@ public struct TakenPreset: Equatable, Sendable {
 // MARK: - The fitting
 
 public enum SharedSetupFit {
+    /// The reason a line carries when the person switched it off themselves.
+    public static let switchedOffReason = "You switched this off."
+
     /// Proposes a match for each of the author's devices (exact model first, the same role otherwise, none) and a state for each line.
     /// `overrides` replaces the proposal for the author's devices a person chose; `switchedOff` holds line ids the person turned off.
     public static func plan(_ setup: SharedSetup, for env: ReceiverEnvironment, overrides: [Int: GearOverride] = [:], switchedOff: Set<String> = []) -> FitPlan {
@@ -135,7 +151,7 @@ public enum SharedSetupFit {
         var p = Planner(setup: setup, env: env, matches: matches)
         let lines = p.lines().map { l -> SetupLine in
             var l = l
-            if switchedOff.contains(l.id), !l.state.isOff { l.state = .off("You switched this off.") }
+            if switchedOff.contains(l.id), !l.state.isOff { l.state = .off(SharedSetupFit.switchedOffReason); l.cause = .person }
             return l
         }
         return FitPlan(matches: matches, lines: lines)
@@ -276,6 +292,13 @@ private struct Planner {
         }
     }
 
+    /// True when no device at all stands for the author's device at `i` (so the line waits for gear rather than for a different model).
+    func gearGone(_ i: Int) -> Bool { match(i)?.receiver == nil || match(i)?.quality == MatchQuality.none }
+
+    func pluginMissingNames(_ list: [J]) -> [String] {
+        list.filter { p in !env.plugins.contains { Planner.same($0.name, p["name"]?.string ?? "") && ($0.maker.isEmpty || (p["maker"]?.string ?? "").isEmpty || Planner.same($0.maker, p["maker"]?.string ?? "")) } }.compactMap { $0["name"]?.string }
+    }
+
     func pluginState(_ list: [J], what: String) -> LineState {
         let names = list.compactMap { $0["name"]?.string }
         let missing = list.filter { p in !env.plugins.contains { Planner.same($0.name, p["name"]?.string ?? "") && ($0.maker.isEmpty || (p["maker"]?.string ?? "").isEmpty || Planner.same($0.maker, p["maker"]?.string ?? "")) } }.compactMap { $0["name"]?.string }
@@ -289,7 +312,9 @@ private struct Planner {
 
     mutating func lines() -> [SetupLine] {
         var out: [SetupLine] = []
-        func add(_ id: String, _ part: String, _ kind: LineKind, _ title: String, _ state: LineState) { out.append(SetupLine(id: id, part: part, kind: kind, title: title, state: state)) }
+        func add(_ id: String, _ part: String, _ kind: LineKind, _ title: String, _ state: LineState, cause: OffCause? = nil) {
+            out.append(SetupLine(id: id, part: part, kind: kind, title: title, state: state, cause: state.isOff ? cause : nil))
+        }
         let s = setup.settings
 
         if let a = s["audio"] {
@@ -297,26 +322,28 @@ private struct Planner {
             let speakers = setup.gear.indices.filter { setup.gear[$0].role == "speaker" }
             let plat = platform(needs: [.systemAudio], macOS: T.minMacOSForEqualizer)
             var curveState: LineState
+            var curveCause: OffCause?
             if let off = plat.off { curveState = .off(off) }
             else if speakers.isEmpty { curveState = state(nil, note: plat.note) }
             else if speakers.contains(where: { match($0)?.quality == .exactModel }) { curveState = state(nil, note: plat.note) }
             else if let i = speakers.first(where: { match($0)?.quality == .sameRole }), let r = match(i)?.receiver {
                 curveState = .off("Your speakers are the \(r.model), not the \(gearName(i)) this curve was made for, so the equalizer curve is skipped and yours is kept.")
-            } else { curveState = .off("No speakers connected that match the \(gearName(speakers[0])) this curve was made for.") }
-            add("audio.equalizer", "audio", .equalizerCurve, "Equalizer curve", curveState)
+            } else { curveState = .off("No speakers connected that match the \(gearName(speakers[0])) this curve was made for."); curveCause = .gearMissing(speakers[0]) }
+            add("audio.equalizer", "audio", .equalizerCurve, "Equalizer curve", curveState, cause: curveCause)
 
             for item in (eq["speakerCurves"]?.array ?? []) {
                 guard let g = item["gear"]?.integer, setup.gear.indices.contains(g) else { continue }
                 let d = deviceState(g, what: "speaker", allowDifferentModel: false, differentModelNote: "")
-                add("audio.equalizer.speaker.\(g)", "audio", .speakerCurve(gear: g), "Equalizer curve for the \(gearName(g))", state(plat.off ?? d.off, note: plat.note, d.note))
+                add("audio.equalizer.speaker.\(g)", "audio", .speakerCurve(gear: g), "Equalizer curve for the \(gearName(g))", state(plat.off ?? d.off, note: plat.note, d.note),
+                    cause: plat.off == nil && gearGone(g) ? .gearMissing(g) : nil)
             }
             add("audio.effects", "audio", .outputEffects, "Output compressor and limiter", .appliesWithNote("The output limiter is switched on and stays on."))
             let plug = a["effects"]?["plugins"]?.array ?? []
-            if !plug.isEmpty { add("audio.plugins", "audio", .outputPlugins, "Output plugins", pluginState(plug, what: "output")) }
+            if !plug.isEmpty { add("audio.plugins", "audio", .outputPlugins, "Output plugins", pluginState(plug, what: "output"), cause: .pluginsMissing(pluginMissingNames(plug))) }
             for item in (a["keepAwake"]?.array ?? []) {
                 guard let g = item["gear"]?.integer, setup.gear.indices.contains(g) else { continue }
                 let d = deviceState(g, what: "speaker", allowDifferentModel: false, differentModelNote: "")
-                add("audio.keepAwake.\(g)", "audio", .keepAwake(gear: g), "Keep the \(gearName(g)) awake", state(d.off, note: d.note))
+                add("audio.keepAwake.\(g)", "audio", .keepAwake(gear: g), "Keep the \(gearName(g)) awake", state(d.off, note: d.note), cause: gearGone(g) ? .gearMissing(g) : nil)
             }
             let keep = a["keepInput"] ?? .null
             let mics = (keep["gear"]?.array ?? []).compactMap(\.integer).filter { setup.gear.indices.contains($0) }
@@ -325,20 +352,22 @@ private struct Planner {
                 let st: LineState = mics.isEmpty || !ok.isEmpty
                     ? (ok.count < mics.count ? .appliesWithNote("Only for the microphones you have.") : .applies)
                     : .off("None of the microphones this keeps (\(mics.map(gearName).joined(separator: ", "))) are connected.")
-                add("audio.keepInput", "audio", .keepInput, "Keep a microphone as the input", st)
+                add("audio.keepInput", "audio", .keepInput, "Keep a microphone as the input", st, cause: mics.count == 1 ? .gearMissing(mics[0]) : nil)
             }
         }
 
         if let m = s["microphone"] {
             let plat = platform(needs: [.microphone])
             var off = plat.off, note = plat.note, extra: String?
+            var cause: OffCause?
             if let src = m["source"]?.integer, setup.gear.indices.contains(src) {
                 let d = deviceState(src, what: "microphone", allowDifferentModel: true, differentModelNote: "Check the level.")
+                if off == nil, d.off != nil, gearGone(src) { cause = .gearMissing(src) }
                 off = off ?? d.off; extra = d.note
             }
-            add("microphone.chain", "microphone", .microphoneChain, "Microphone chain", state(off, note: note, extra))
+            add("microphone.chain", "microphone", .microphoneChain, "Microphone chain", state(off, note: note, extra), cause: cause)
             let plug = m["plugins"]?.array ?? []
-            if !plug.isEmpty { add("microphone.plugins", "microphone", .microphonePlugins, "Microphone plugins", pluginState(plug, what: "microphone")) }
+            if !plug.isEmpty { add("microphone.plugins", "microphone", .microphonePlugins, "Microphone plugins", pluginState(plug, what: "microphone"), cause: .pluginsMissing(pluginMissingNames(plug))) }
         }
 
         if s["windows"] != nil {
@@ -369,14 +398,15 @@ private struct Planner {
         if let d = s["display"] {
             let g = d["monitor"]?.integer ?? -1
             var st: LineState = .off("No monitor is connected.")
+            var cause: OffCause?
             if setup.gear.indices.contains(g), let m = match(g) {
                 switch m.quality {
                 case .exactModel: st = .applies
                 case .sameRole: st = .off("Your monitor is the \(m.receiver?.model ?? "another model"), not the \(gearName(g)) these values were made for, so they are skipped.")
-                case .none: st = .off("No monitor connected matches the \(gearName(g)) these values were made for.")
+                case .none: st = .off("No monitor connected matches the \(gearName(g)) these values were made for."); cause = .gearMissing(g)
                 }
             }
-            add("display", "display", .display, "Monitor brightness, contrast, color and sharpness", st)
+            add("display", "display", .display, "Monitor brightness, contrast, color and sharpness", st, cause: cause)
         }
         return out
     }

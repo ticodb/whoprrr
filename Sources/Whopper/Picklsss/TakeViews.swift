@@ -64,8 +64,7 @@ private struct DetailStep: View {
                     GearTags(gear: setup.gear, fits: fits(setup))
                 }
             }
-            if !s.requirements.isEmpty { RequirementsList(rows: s.requirements) }
-            if let plan = s.plan { LinesCard(s: s, plan: plan, editable: false) }
+            if let plan = s.plan { GroupedLines(s: s, plan: plan, editable: false) }
             HStack(spacing: 8) {
                 Button("Fit to my gear") { s.toMatch() }.buttonStyle(.brand).disabled(!s.canTake)
                 Button("Take one part") { s.openPartPicker() }.buttonStyle(.brandQuiet).disabled(!s.canTake)
@@ -100,54 +99,6 @@ private struct DetailStep: View {
             let own = PicklsssLock.isOwnFile(madeBy: s.fileMadeBy, pass: c.license.currentPass)
             Text(own ? "You made this file with your own key. It opens free." : "Looking at how this fits your gear is free. Putting it on your Mac needs Picklsss (setups other people shared).")
                 .font(Brand.subheadline).fixedSize(horizontal: false, vertical: true)
-        }
-    }
-}
-
-/// Every line of a setup with the fit label judged against this Mac's gear, not the author's.
-private struct LinesCard: View {
-    @ObservedObject var s: TakeSession
-    var plan: FitPlan
-    var editable: Bool
-
-    var body: some View {
-        BrandCard {
-            ForEach(Array(plan.lines.enumerated()), id: \.element.id) { i, l in
-                HStack(alignment: .top, spacing: 10) {
-                    // A line that cannot run on this Mac has no switch: its reason and the label say so. One the person switched off keeps its switch.
-                    if editable {
-                        if l.state.isOff && !s.switchedOff.contains(l.id) {
-                            Color.clear.frame(width: 38, height: 1)
-                        } else {
-                            Toggle("", isOn: Binding(get: { !l.state.isOff }, set: { s.toggle(l.id, on: $0) }))
-                                .labelsHidden().toggleStyle(.switch).controlSize(.small)
-                                .accessibilityLabel("\(PicklsssWords.partTitle(l.part)): \(l.title)")
-                        }
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(PicklsssWords.partTitle(l.part)).font(Brand.headline)
-                        Text(l.title).font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                        if let r = l.state.reason { Text(r).font(Brand.caption).foregroundStyle(l.state.isOff ? Color.secondary : StatusChip.Tone.warn.text).fixedSize(horizontal: false, vertical: true) }
-                        if editable, !l.state.isOff, let ch = s.changes[l.id] { changeView(ch) }
-                    }
-                    Spacer(minLength: 8)
-                    FitChip(fit: s.fitLabel(l)).fixedSize()
-                }
-                if i < plan.lines.count - 1 { Divider() }
-            }
-            if plan.lines.isEmpty { Text("Nothing in this setup can be used on this Mac.").font(Brand.subheadline).foregroundStyle(.secondary) }
-        }
-    }
-
-    @ViewBuilder private func changeView(_ ch: LineChange) -> some View {
-        if ch.isNoChange { Text("No change: your settings already match.").font(Brand.caption).foregroundStyle(.secondary) }
-        else {
-            DisclosureGroup("\(ch.changed) \(ch.changed == 1 ? "setting changes" : "settings change") · before → after") {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(ch.examples, id: \.self) { Text($0).font(Brand.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).textSelection(.enabled) }
-                    if ch.more > 0 { Text("…and \(ch.more) more").font(Brand.caption2).foregroundStyle(.secondary) }
-                }.padding(.top, 2)
-            }.font(Brand.caption)
         }
     }
 }
@@ -232,8 +183,7 @@ private struct ReviewStep: View {
             } else {
                 PanelHeader("What will change", symbol: "list.bullet.rectangle", subtitle: "Switch off anything you do not want. Nothing changes yet")
             }
-            if !s.requirements.isEmpty { RequirementsList(rows: s.requirements) }
-            if let plan = s.plan { LinesCard(s: s, plan: plan, editable: true) }
+            if let plan = s.plan { GroupedLines(s: s, plan: plan, editable: true) }
             if s.showLock { LockCard(headline: s.isFile ? "Taking a setup from someone else" : "Taking a picklsss", detail: s.isFile ? "Shared setups, fitted to your gear." : "Each one is fitted to your gear before it touches your Mac.", onUnlocked: { s.unlocked() }) }
             if let m = s.message { Text(m).font(Brand.subheadline).foregroundStyle(Brand.accentText).fixedSize(horizontal: false, vertical: true).textSelection(.enabled) }
             ViewThatFits(in: .horizontal) { HStack(spacing: 8) { buttons }; VStack(alignment: .leading, spacing: 8) { buttons } }
@@ -245,7 +195,7 @@ private struct ReviewStep: View {
             Button("Use the new version") { s.requestApply() }.buttonStyle(.brand)
             Button("Keep mine") { if case .update(_, let n) = s.source { c.dismissNotice(n.id) }; c.close() }.buttonStyle(.brandQuiet)
         } else {
-            Button("Apply as “\(s.plan.map { _ in clipped(s.title) } ?? s.title)”") { s.requestApply() }.buttonStyle(.brand).disabled(!s.canTake)
+            Button(s.savesForLater ? "Save it for later" : "Apply as “\(s.plan.map { _ in clipped(s.title) } ?? s.title)”") { s.requestApply() }.buttonStyle(.brand).disabled(!s.canTake)
             Button("Back") { s.stage = .match }.buttonStyle(.brandPlain)
             Button("Not now") { c.close() }.buttonStyle(.brandPlain)
         }
@@ -286,23 +236,16 @@ private struct DoneStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let a = s.applied {
-                PanelHeader("\(a.name) is \(a.updated ? "updated" : "on")", symbol: "checkmark.circle", subtitle: s.isFile ? "Saved in your recipes, from a file" : "Saved in your recipes, from \(s.handle)")
+                PanelHeader("\(a.name) is \(a.updated ? "updated" : a.savedOnly ? "saved for later" : "on")", symbol: "checkmark.circle", subtitle: s.isFile ? "Saved in your recipes, from a file" : "Saved in your recipes, from \(s.handle)")
                 BrandCard {
-                    Text(PicklsssWords.partList(a.parts)).font(Brand.subheadline)
+                    Text(a.savedOnly ? "Nothing went on this Mac. Every line is waiting for gear or a plugin it does not have yet." : PicklsssWords.partList(a.parts)).font(Brand.subheadline)
                     Text("It is an ordinary recipe of yours now, so the save bar works on it. Its menu under Recipes has two ways back: the version before your own last save, and the author’s original as fitted to your gear.")
                         .font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     if !a.failed.isEmpty { Text("Not applied: \(a.failed.joined(separator: ", ")).").font(Brand.caption).foregroundStyle(Brand.accentText) }
                     ForEach(a.notes, id: \.self) { Text($0).font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
                 }
-                if let r = a.recipeID.flatMap({ c.recipes.recipe($0) }), !r.skipped.isEmpty {
-                    BrandCard {
-                        SectionLabel("Waiting")
-                        ForEach(r.skipped) { l in
-                            Text("\(PicklsssWords.partTitle(l.part)): \(l.title). \(l.reason)").font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-                if !s.isFile && !a.updated { didItWork }
+                WaitingCards(s: s)
+                if !s.isFile && !a.updated && !a.savedOnly { didItWork }
                 HStack(spacing: 8) {
                     Button("See it in Recipes") { c.close(); nav.page = .recipes }.buttonStyle(.brand)
                     if !a.updated { Button("Put everything back") { s.putEverythingBack() }.buttonStyle(.brandQuiet) }

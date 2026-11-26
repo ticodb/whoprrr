@@ -14,7 +14,7 @@ final class TakeSession: ObservableObject, Identifiable {
     enum Flag: Equatable { case none, asking, flagged, failed(String) }
 
     /// What a take did, so one button can put everything back.
-    struct Applied { var recipeID: UUID?; var name: String; var before: [String: Data]; var parts: [String]; var failed: [String]; var notes: [String]; var updated: Bool }
+    struct Applied { var recipeID: UUID?; var name: String; var before: [String: Data]; var parts: [String]; var failed: [String]; var notes: [String]; var updated: Bool; var savedOnly = false }
 
     let id = UUID()
     unowned let controller: PicklsssController
@@ -39,6 +39,8 @@ final class TakeSession: ObservableObject, Identifiable {
     @Published var flag: Flag = .none
     @Published var presetNote: String?
     @Published private(set) var busy = false
+    /// The "Stays off for now" groups the person has opened (by group id).
+    @Published var openGroups: Set<String> = []
     private var pendingPart: (part: String, tryNow: Bool)?
 
     init(controller: PicklsssController, card: ShelfCard) { self.controller = controller; source = .shelf(card) }
@@ -75,6 +77,15 @@ final class TakeSession: ObservableObject, Identifiable {
     var canTake: Bool { !(isOwn && card?.shelfState != .public) }
 
     var requirements: [RequirementRow] { setup.map { Requirements.rows($0.requirements, env: env) } ?? [] }
+
+    /// The plan's lines in the order a person reads them: what goes on now, then what stays off, folded by reason.
+    var grouping: ReviewGrouping? { plan.map { ReviewGrouping(plan: $0, gear: setup?.gear ?? []) } }
+
+    /// "Before you start", cut down to what is wrong, plus one quiet sentence for what is fine.
+    var reviewRequirements: ReviewRequirements? { grouping.map { ReviewRequirements(rows: requirements, stays: $0.stays) } }
+
+    /// Nothing can go on: the main button says "Save it for later" and the recipe is saved with every line waiting, not applied.
+    var savesForLater: Bool { !isUpdate && (grouping?.nothingCanGoOn ?? false) }
     var partsOnStage: [String] { setup?.parts ?? [] }
 
     // MARK: Loading
@@ -96,7 +107,7 @@ final class TakeSession: ObservableObject, Identifiable {
 
     func prepare() {
         env = controller.receiverEnvironment()
-        overrides = [:]; switchedOff = []
+        overrides = [:]; switchedOff = []; openGroups = []
         replan()
         stage = isUpdate ? .review : .detail
     }
@@ -124,6 +135,14 @@ final class TakeSession: ObservableObject, Identifiable {
         replan()
     }
 
+    /// One switch for a whole part: every line of it that can go on, together.
+    func toggle(_ lineIDs: [String], on: Bool) {
+        for id in lineIDs { if on { switchedOff.remove(id) } else { switchedOff.insert(id) } }
+        replan()
+    }
+
+    func toggleGroup(_ id: String) { if openGroups.contains(id) { openGroups.remove(id) } else { openGroups.insert(id) } }
+
     /// The gear the person may stand in for one of the author's devices: the same kind, from what is connected.
     func candidates(for g: SharedGear) -> [DeviceSignature] {
         env.gear.filter { ShelfRanking.normalizedRole($0.role.rawValue) == ShelfRanking.normalizedRole(g.role) }
@@ -146,7 +165,13 @@ final class TakeSession: ObservableObject, Identifiable {
     private func gate() {
         message = nil
         let action: PicklsssLock.Action = pendingPart != nil ? (isFile ? .takeFromFile(madeBy: fileMadeBy) : .takePart) : lockAction
-        if PicklsssLock.decision(action, pass: controller.license.currentPass) == .locked { showLock = true; return }
+        #if DEBUG
+        // Debug builds only: lets the step runner reach the screens after the lock without a server that sells the extra.
+        let skipLock = ProcessInfo.processInfo.environment["WHOPRRR_DEBUG_NO_LOCK"] == "1"
+        #else
+        let skipLock = false
+        #endif
+        if !skipLock, PicklsssLock.decision(action, pass: controller.license.currentPass) == .locked { showLock = true; return }
         showLock = false
         if !isFile, controller.countChoice == .unasked { askCount = true; return }
         Task { await commit() }
@@ -184,13 +209,13 @@ final class TakeSession: ObservableObject, Identifiable {
             try? await Task.sleep(nanoseconds: UInt64(beat * 1_000_000_000))
             cookinDone += 1
         }
-        let result = applyWhole(setup: setup, plan: plan, receipt: receipt, parts: parts)
+        let result = applyWhole(setup: setup, plan: plan, receipt: receipt, parts: parts, saveOnly: savesForLater)
         applied = result
         stage = .done
         controller.recomputeNotices()
     }
 
-    private func applyWhole(setup: SharedSetup, plan: FitPlan, receipt: TakeReceipt?, parts: [String]) -> Applied {
+    private func applyWhole(setup: SharedSetup, plan: FitPlan, receipt: TakeReceipt?, parts: [String], saveOnly: Bool = false) -> Applied {
         let recipes = controller.recipes
         let madeBy: String = isFile ? (fileMadeBy ?? "a file") : (handle.isEmpty ? nil : handle) ?? "the shelf"
         var fit = SharedSetupFit.fit(setup, plan: plan, for: env, madeBy: madeBy)
@@ -227,7 +252,8 @@ final class TakeSession: ObservableObject, Identifiable {
 
         fit.recipe.name = StarterRecipes.uniqueName(setup.title, existing: recipes.recipes.map(\.name))
         let added = recipes.addTaken(fit.recipe)
-        let failed = recipes.apply(added.id)
+        // "Save it for later": every line is waiting, so there is nothing to put on this Mac. The recipe is saved the same way and is not applied.
+        let failed = saveOnly ? [] : recipes.apply(added.id)
         if !isFile, let c = card {
             var rec = TakeRecord(picklsssId: c.id, title: c.title, handle: c.cook.handle, version: c.version, recipeID: added.id, takenAt: Date(),
                                  counted: receipt?.counted ?? false, takeToken: receipt?.takeToken, askFrom: receipt?.askFrom, askUntil: receipt?.askUntil,
@@ -235,7 +261,7 @@ final class TakeSession: ObservableObject, Identifiable {
             if receipt?.again == true { rec.counted = false; rec.takeToken = nil }       // the first take's token and counting stand
             controller.record(rec)
         }
-        return Applied(recipeID: added.id, name: added.name, before: before, parts: parts, failed: failed, notes: notes, updated: false)
+        return Applied(recipeID: added.id, name: added.name, before: before, parts: parts, failed: failed, notes: notes, updated: false, savedOnly: saveOnly)
     }
 
     static func feature(_ part: String) -> Feature? {

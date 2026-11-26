@@ -18,6 +18,8 @@ public struct RequirementRow: Equatable, Identifiable, Sendable {
     public var id: String { "\(kind)-\(title)" }
     /// The plugin's name, so the screen can offer a link the person clicks. Plugins are never downloaded or installed.
     public var pluginName: String?
+    /// What the row is about, bare, for a sentence: "Pro-Q 3", "macOS 14.2 or newer", "Accessibility".
+    public var subject: String = ""
 }
 
 public enum Requirements {
@@ -26,18 +28,18 @@ public enum Requirements {
         for name in r.plugins {
             let have = env.plugins.contains { $0.name.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(name.trimmingCharacters(in: .whitespaces)) == .orderedSame }
             out.append(RequirementRow(kind: .plugin, title: "Needs the plugin \(name)", detail: have ? "Installed on this Mac" : "Not installed on this Mac. Whoprrr never installs plugins; the lines that need it stay off",
-                                      status: have ? .ready : .missing, pluginName: name))
+                                      status: have ? .ready : .missing, pluginName: name, subject: name))
         }
         if let need = r.minMacOS, !need.isEmpty {
             let ok = atLeast(env.macOS, need)
-            out.append(RequirementRow(kind: .macOS, title: "Needs macOS \(need) or newer", detail: ok ? "This Mac has \(env.macOS)" : "This Mac has \(env.macOS). The lines that need it stay off", status: ok ? .ready : .missing))
+            out.append(RequirementRow(kind: .macOS, title: "Needs macOS \(need) or newer", detail: ok ? "This Mac has \(env.macOS)" : "This Mac has \(env.macOS). The lines that need it stay off", status: ok ? .ready : .missing, subject: "macOS \(need) or newer"))
         }
         for raw in r.permissions {
             guard let p = Permission(rawValue: raw) else { continue }
             switch env.permissions[p] {
-            case .granted?: out.append(RequirementRow(kind: .permission, title: "Needs \(p.title)", detail: "Allowed for Whoprrr", status: .ready))
-            case .denied?: out.append(RequirementRow(kind: .permission, title: "Needs \(p.title)", detail: "Not allowed for Whoprrr on this Mac. Allow it in System Settings and the lines can be switched on", status: .missing))
-            default: out.append(RequirementRow(kind: .permission, title: "Needs \(p.title)", detail: "Whoprrr will ask when it is needed", status: .ask))
+            case .granted?: out.append(RequirementRow(kind: .permission, title: "Needs \(p.title)", detail: "Allowed for Whoprrr", status: .ready, subject: p.title))
+            case .denied?: out.append(RequirementRow(kind: .permission, title: "Needs \(p.title)", detail: "Not allowed for Whoprrr on this Mac. Allow it in System Settings and the lines can be switched on", status: .missing, subject: p.title))
+            default: out.append(RequirementRow(kind: .permission, title: "Needs \(p.title)", detail: "Whoprrr will ask when it is needed", status: .ask, subject: p.title))
             }
         }
         return out
