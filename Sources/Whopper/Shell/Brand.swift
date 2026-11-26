@@ -192,22 +192,24 @@ struct StatusChip: View {
 }
 
 struct BrandButtonStyle: ButtonStyle {
-    enum Kind { case primary, secondary }
+    enum Kind { case primary, secondary, plain }
     var kind: Kind = .secondary
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 14, weight: .semibold, design: .rounded))
             .padding(.horizontal, 13).padding(.vertical, 6)
-            .foregroundStyle(Color.white)
+            .foregroundStyle(kind == .plain ? Color.primary : Color.white)
             // Primary is the deeper violet, quiet is the "on switch" violet: both solid with white text, so neither reads as dimmed.
-            .background(kind == .primary ? Brand.violet : Brand.violetBright, in: Capsule())
+            // Plain is for the ways out of a step (Back, Not now, Cancel): neutral, so the step's own action is the one that stands out.
+            .background(kind == .plain ? AnyShapeStyle(Color.primary.opacity(0.12)) : AnyShapeStyle(kind == .primary ? Brand.violet : Brand.violetBright), in: Capsule())
             .opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.4)
     }
 }
 extension ButtonStyle where Self == BrandButtonStyle {
     static var brand: BrandButtonStyle { BrandButtonStyle(kind: .primary) }
     static var brandQuiet: BrandButtonStyle { BrandButtonStyle(kind: .secondary) }
+    static var brandPlain: BrandButtonStyle { BrandButtonStyle(kind: .plain) }
 }
 
 /// Takes its content's height up to `maxHeight`, then scrolls. (A ScrollView proposed no height reports its content size.)

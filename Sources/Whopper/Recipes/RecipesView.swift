@@ -110,6 +110,7 @@ struct RecipesView: View {
                     Toggle("Switch automatically", isOn: Binding(get: { r.autoApply }, set: { recipes.setAutoApply(r.id, $0) }))
                         .toggleStyle(.switch).controlSize(.small).font(Brand.caption).disabled(r.devices.isEmpty)
                         .help(r.devices.isEmpty ? "Tie the recipe to gear first" : "Apply when all of this gear is connected")
+                        .accessibilityLabel("Switch to \(r.name) automatically")
                 }
             }
             if !g.missing.isEmpty && !r.devices.isEmpty {

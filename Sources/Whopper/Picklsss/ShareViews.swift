@@ -98,7 +98,7 @@ struct ShareFlowView: View {
             }
             HStack(spacing: 8) {
                 Button("Next") { s.next() }.buttonStyle(.brand).disabled(!s.canContinue || (s.isUpdate && !s.changedAnything)).keyboardShortcut(.defaultAction)
-                Button("Cancel") { c.sharing = nil }.buttonStyle(.brandQuiet).keyboardShortcut(.cancelAction)
+                Button("Cancel") { c.sharing = nil }.buttonStyle(.brandPlain).keyboardShortcut(.cancelAction)
             }
             if s.isUpdate && !s.changedAnything && s.canContinue { Text("Nothing has changed since you last shared it.").font(Brand.caption).foregroundStyle(.secondary) }
         }
@@ -139,7 +139,7 @@ struct ShareFlowView: View {
             HStack(spacing: 8) {
                 if s.mode == .file { Button("Save the file") { s.saveFile() }.buttonStyle(.brand).disabled(ShareFields.titleProblem(s.title) != nil || ShareFields.lineProblem(s.line) != nil) }
                 else { Button(s.isUpdate ? "Share update" : "Share") { Task { await s.send() } }.buttonStyle(.brand).disabled(!s.canSend || s.busy).keyboardShortcut(.defaultAction) }
-                Button("Back") { s.back() }.buttonStyle(.brandQuiet)
+                Button("Back") { s.back() }.buttonStyle(.brandPlain)
             }
             if s.mode == .file { Text("Anyone with Whoprrr can open this file and see how it fits their gear. Nothing is uploaded.").font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
         }

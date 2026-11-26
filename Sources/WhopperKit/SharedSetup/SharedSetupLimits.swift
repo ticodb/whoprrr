@@ -339,8 +339,9 @@ private struct Checker {
                     let name = hz.map { "\(bandName($0)) \(signed(g)) dB at \(num($0)) Hz" } ?? "\(signed(g)) dB"
                     if g > T.maxBoostDB {
                         add(join(bp, "gainDb"), "boost-6db", "\(ctx): \(name). Shared setups cannot boost more than +\(num(T.maxBoostDB)) dB, so nobody’s speakers or ears are hurt.")
-                    } else {
-                        boost(g, join(bp, "gainDb"), ctx: ctx, what: "the \(name.replacingOccurrences(of: " at ", with: " at "))")
+                    } else if g >= T.maxBoostDB - T.unusualFraction * T.maxBoostDB {
+                        // The band's name already carries the number, so it is said once.
+                        unusual.append("\(ctx): \(name) is close to the +\(num(T.maxBoostDB)) dB limit.")
                     }
                 }
             }

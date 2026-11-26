@@ -36,7 +36,7 @@ struct TakeFlowView: View {
             BrandCard {
                 Text("This could not be opened").font(Brand.display(15, .semibold))
                 Text(m).font(Brand.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
-                HStack { Button("Try again") { Task { await s.load() } }.buttonStyle(.brand); Button("Back to the shelf") { c.close() }.buttonStyle(.brandQuiet) }
+                HStack { Button("Try again") { Task { await s.load() } }.buttonStyle(.brand); Button("Back to the shelf") { c.close() }.buttonStyle(.brandPlain) }
             }
         }
     }
@@ -211,7 +211,7 @@ private struct MatchStep: View {
                     }
                 }
             }
-            HStack(spacing: 8) { Button("Review the changes") { s.toReview() }.buttonStyle(.brand); Button("Back") { s.backToDetail() }.buttonStyle(.brandQuiet) }
+            HStack(spacing: 8) { Button("Review the changes") { s.toReview() }.buttonStyle(.brand); Button("Back") { s.backToDetail() }.buttonStyle(.brandPlain) }
         }
     }
 }
@@ -246,8 +246,8 @@ private struct ReviewStep: View {
             Button("Keep mine") { if case .update(_, let n) = s.source { c.dismissNotice(n.id) }; c.close() }.buttonStyle(.brandQuiet)
         } else {
             Button("Apply as “\(s.plan.map { _ in clipped(s.title) } ?? s.title)”") { s.requestApply() }.buttonStyle(.brand).disabled(!s.canTake)
-            Button("Back") { s.stage = .match }.buttonStyle(.brandQuiet)
-            Button("Not now") { c.close() }.buttonStyle(.brandQuiet)
+            Button("Back") { s.stage = .match }.buttonStyle(.brandPlain)
+            Button("Not now") { c.close() }.buttonStyle(.brandPlain)
         }
     }
 
@@ -306,7 +306,7 @@ private struct DoneStep: View {
                 HStack(spacing: 8) {
                     Button("See it in Recipes") { c.close(); nav.page = .recipes }.buttonStyle(.brand)
                     if !a.updated { Button("Put everything back") { s.putEverythingBack() }.buttonStyle(.brandQuiet) }
-                    Button("Back to the shelf") { c.close() }.buttonStyle(.brandQuiet)
+                    Button("Back to the shelf") { c.close() }.buttonStyle(.brandPlain)
                 }
             }
         }
@@ -389,7 +389,7 @@ private struct PartStep: View {
     @ViewBuilder private var buttons: some View {
         Button("Add to my presets") { if let p = chosen { s.requestPart(p, tryNow: false) } }.buttonStyle(.brand).disabled(chosen == nil)
         Button("Add and try it now") { if let p = chosen { s.requestPart(p, tryNow: true) } }.buttonStyle(.brandQuiet).disabled(chosen == nil)
-        Button("Back") { s.backToDetail() }.buttonStyle(.brandQuiet)
+        Button("Back") { s.backToDetail() }.buttonStyle(.brandPlain)
     }
 }
 
