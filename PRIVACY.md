@@ -3,6 +3,7 @@
 **Short version: Whoprrr keeps everything on your Mac and sends nothing unless you press a button to send it.**
 
 - No account, no analytics, no crash reporting. The only network request the app makes is the update check: once a day (or when you choose Check for Updates…) it downloads `https://whoprrr.app/mac/appcast.xml` through Sparkle. That request carries the app version and macOS version in its User-Agent, as any HTTP request does, and no system profile (Sparkle's optional profiling is off). Turn it off with "Check for updates automatically" in Features. Updates are verified against an EdDSA key built into the app before they install. Otherwise the app opens a web page only when you press a button such as "Report a problem", and then your browser does it.
+- **Activation.** When you enter your key, Whoprrr sends it once to `https://whoprrr.app/api/activate` together with: an id for this Mac (a one-way keyed hash of the hardware id, so it reveals nothing and stays the same after a reinstall), this Mac's name as set in System Settings (it is what you see in your own device list), the model identifier and the app version. The answer is a pass: a small signed token that works on this Mac only. The app does not keep your key. About once a week it sends the pass back to `https://whoprrr.app/api/pass/renew` to get a fresh one; nothing else is in that request. The pass is checked on your Mac at every launch without contacting anyone, so Whoprrr works offline until the pass runs out (30 days).
 - **Fit report (optional, one press).** After the gear scan, Whoprrr offers to send what worked on your gear. The exact text is shown first and it is sent only if you press Send, once, to `https://whoprrr.app/api/fit`. It holds the app version, Mac model, chip and macOS version, the model names and connection types of your gear, and which setup lines were on or off. It never holds serial numbers, device identifiers, the names you gave your devices, or anything about your clipboard, rules or files. The server keeps the report for up to 24 months and does not store the address it came from. Press "No thanks" and nothing is sent.
 - Audio is processed live in memory. It is never recorded or written to disk, and never leaves your Mac.
 - The camera is used only while you run camera-assisted display matching; frames are analysed in memory and not saved.
@@ -16,6 +17,7 @@ All in `~/Library/Application Support/Whopper/` (the folder keeps the project's 
 | `input.json` | Your key and mouse rules and key replacements |
 | `audio.json` | Equalizer, effects, plugin chains and their saved plugin settings, mic and routing settings, device names last seen |
 | `windows.json`, `clipboard.json` | Settings for those modules |
+| `license.json` | This Mac's pass and when it was last refreshed. No key |
 | `recipes.json`, `presets.json` | Your recipes (including the settings and device names they cover) and saved presets |
 | `Clipboard/clipboard.sqlite` and `Clipboard/images/` | **Everything you copy** while clipboard history is on |
 | `~/Library/Application Support/SamsungDisplayControl/` | Display presets and learned display settings |

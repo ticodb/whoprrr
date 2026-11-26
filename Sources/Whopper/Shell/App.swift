@@ -77,7 +77,7 @@ enum Shared {
                 let ids = now.map(\.id).sorted()
                 guard ids != lastGear else { return }
                 lastGear = ids
-                if let r = recipes.autoApplyCandidate(connected: now) { recipes.apply(r.id, automatic: true) }
+                if LicenseController.shared.isLicensed, let r = recipes.autoApplyCandidate(connected: now) { recipes.apply(r.id, automatic: true) }
             }
         }
     }
@@ -88,11 +88,14 @@ enum Shared {
             + SystemActions.all.map { a in (a.id, a.title, { a.run(input) }) }
             + CommonActions.all.map { a in (a.id, a.title, { a.run(input) }) }
             + WindowAction.allCases.map { a in ("window.\(a.rawValue)", "Window: \(a.title)", { windows.run(a) }) }
-        features.$enabled.sink { enabled in
-            audio.setActive(enabled.contains(.audio) || enabled.contains(.microphone))
-            windows.setActive(enabled.contains(.windows))
-            clipboard.setActive(enabled.contains(.clipboard))
-            input.setActive(enabled.contains(.remap))
+        // Without a valid pass nothing runs in the background; features come back the moment one arrives, with no restart.
+        let license = LicenseController.shared
+        features.$enabled.combineLatest(license.$state).sink { enabled, state in
+            let ok = license.skipped || state.isLicensed
+            audio.setActive(ok && (enabled.contains(.audio) || enabled.contains(.microphone)))
+            windows.setActive(ok && enabled.contains(.windows))
+            clipboard.setActive(ok && enabled.contains(.clipboard))
+            input.setActive(ok && enabled.contains(.remap))
         }.store(in: &bag)
     }
 }
@@ -117,11 +120,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DemoData.seedAfterGearLoads()
         if let ap = ProcessInfo.processInfo.environment["WHOPPER_APPEARANCE"] { NSApp.appearance = NSAppearance(named: ap == "light" ? .aqua : .darkAqua) }
         if ProcessInfo.processInfo.environment["WHOPPER_NO_START"] != "1" { Shared.startFeatures() }
+        LicenseController.shared.start()
         // First run: open the window on the gear scan, which proposes a starter recipe and then leads to Permissions.
+        // Without a valid pass the window opens on "Enter your key" instead, and the gear scan follows the activation.
         let welcomed = "gg.tico.whoprrr.welcomed"
-        if !UserDefaults.standard.bool(forKey: welcomed), ProcessInfo.processInfo.environment["SDC_DEBUG_WINDOW"] != "1" {
-            UserDefaults.standard.set(true, forKey: welcomed)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { Shared.showWindow(page: .welcome) }
+        if ProcessInfo.processInfo.environment["SDC_DEBUG_WINDOW"] != "1" {
+            if !LicenseController.shared.isLicensed {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { Shared.showWindow() }
+            } else if !UserDefaults.standard.bool(forKey: welcomed) {
+                UserDefaults.standard.set(true, forKey: welcomed)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { Shared.showWindow(page: .welcome) }
+            }
         }
         // Development aid: SDC_DEBUG_WINDOW=1 shows a view in a normal window (WHOPPER_VIEW=quick for the menu-bar panel).
         if ProcessInfo.processInfo.environment["SDC_DEBUG_WINDOW"] == "1" {
@@ -153,13 +162,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// The menu-bar panel, or the short "not activated" panel while there is no valid pass.
+struct QuickRoot: View {
+    @ObservedObject private var license = LicenseController.shared
+    var body: some View { if license.isLicensed { QuickView() } else { LicenseQuickView() } }
+}
+
 @main
 struct WhopperApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
 
     var body: some Scene {
         MenuBarExtra {
-            Shared.wrap(QuickView())
+            Shared.wrap(QuickRoot())
         } label: {
             Image(nsImage: MenuBarIcon.make())
         }
