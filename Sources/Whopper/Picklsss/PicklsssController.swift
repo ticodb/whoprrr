@@ -169,7 +169,8 @@ final class PicklsssController: ObservableObject {
     func openFile(_ url: URL) {
         let name = url.lastPathComponent
         guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else {
-            fileProblem = FileProblem(name: name, title: PicklsssWords.tamperedTitle, why: "This file could not be read.", violations: [], tampered: false); return
+            fileProblem = FileProblem(name: name, title: PicklsssWords.tamperedTitle, why: "This file could not be read.", violations: [], tampered: false)
+            take = nil; Shared.showWindow(page: .picklsss); return
         }
         let opened = SharedSetupFile.decode(data)
         guard let setup = opened.setup else {
@@ -177,10 +178,12 @@ final class PicklsssController: ObservableObject {
             let lines = opened.report.violations.map(\.message)
             let why = tampered ? PicklsssWords.tamperedWhy : (opened.problem?.message ?? "This setup breaks Whoprrr’s limits.")
             fileProblem = FileProblem(name: name, title: PicklsssWords.tamperedTitle, why: why, violations: lines, tampered: tampered)
+            take = nil      // a setup already open must not stay on screen as if it were this file
             Shared.showWindow(page: .picklsss)
             return
         }
         let session = TakeSession(controller: self, file: setup, madeBy: opened.madeBy, name: name)
+        fileProblem = nil
         take = session
         route = .shelf
         Shared.showWindow(page: .picklsss)
