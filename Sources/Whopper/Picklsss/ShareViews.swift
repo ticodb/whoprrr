@@ -11,7 +11,13 @@ struct ShareFlowView: View {
     @State private var showLeftOut = false
 
     var body: some View {
-        ScrollView {
+        ScrollView { content }
+            .frame(width: 560, height: 640)
+            .task { if s.isUpdate { await s.loadPrevious() } }
+    }
+
+    /// The sheet's content, apart from its ScrollView so a screenshot can draw it.
+    var content: some View {
             VStack(alignment: .leading, spacing: 14) {
                 switch s.step {
                 case .goes: goes
@@ -25,9 +31,6 @@ struct ShareFlowView: View {
                 }
             }
             .padding(24)
-        }
-        .frame(width: 560, height: 640)
-        .task { if s.isUpdate { await s.loadPrevious() } }
     }
 
     // MARK: 1. What goes
@@ -41,11 +44,11 @@ struct ShareFlowView: View {
                 ForEach(Array(s.rows.enumerated()), id: \.element.id) { i, r in
                     HStack(alignment: .top, spacing: 10) {
                         Toggle("", isOn: Binding(get: { s.partsOn.contains(r.part) }, set: { s.toggle(r.part, on: $0) }))
-                            .labelsHidden().toggleStyle(.switch).controlSize(.small).accessibilityLabel(PicklsssWords.partTitle(r.part))
+                            .labelsHidden().toggleStyle(.switch).controlSize(.small).disabled(r.empty).accessibilityLabel(PicklsssWords.partTitle(r.part))
                         VStack(alignment: .leading, spacing: 3) {
                             Text(PicklsssWords.partTitle(r.part)).font(Brand.headline)
-                            Text(r.detail).font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                            ForEach(r.left, id: \.self) { Text("Left out: \($0)").font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+                            Text(r.empty ? "Nothing in this part can be shared from this recipe." : r.detail).font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            if !r.left.isEmpty { Text("\(r.left.count) \(r.left.count == 1 ? "thing" : "things") left out of this part (listed below)").font(Brand.caption).foregroundStyle(.secondary) }
                             ForEach(Array(r.violations.enumerated()), id: \.offset) { _, v in
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(v.message).font(Brand.caption).foregroundStyle(StatusChip.Tone.bad.text).fixedSize(horizontal: false, vertical: true)
@@ -72,7 +75,12 @@ struct ShareFlowView: View {
                         ForEach(SharedSetupExport.alwaysLeftOut, id: \.self) { Text("• \($0)").font(Brand.caption).foregroundStyle(.secondary) }
                     }.padding(.top, 4)
                 } label: { Text("Always left out").font(Brand.headline) }
-                if !s.leftOut.isEmpty { Text("Taken out of this one: " + s.leftOut.joined(separator: "; ") + ".").font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+                if !s.leftOut.isEmpty {
+                    Text("Taken out of this one").font(Brand.headline)
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(s.leftOut.enumerated()), id: \.offset) { Text("• \($0.element)").font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+                    }
+                }
             }
             HStack(spacing: 8) {
                 Button("Next") { s.next() }.buttonStyle(.brand).disabled(!s.canContinue || (s.isUpdate && !s.changedAnything)).keyboardShortcut(.defaultAction)

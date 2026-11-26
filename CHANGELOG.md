@@ -12,6 +12,16 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 - **Activation**: Whoprrr asks for your key on first launch and keeps a pass for this Mac. It is checked offline at every launch and refreshed by itself about once a week; features stay off without a valid pass. Debug builds can skip the check (`WHOPPER_LICENSE=skip`) or point at a test server.
 - **Fit report**: after setup, an optional one-press report of what worked on your gear (models and results only; the text is shown first).
 
+- **Picklsss, the shelf of setups other people shared**: a page with tabs For your gear, Popular and New, and search. Browsing needs no extra and sends nothing about your gear (ranking is done on your Mac). Open one to see every line with a fit label judged against *your* gear, match their devices to yours, review a before and after, and apply with "Cookin'". The result is an ordinary recipe, with two ways back in its menu (before your last save; the author's original as fitted) and one button that puts everything back. Take one part on its own into your presets. Plugins are never downloaded or installed; a missing one is a link you may click.
+- **The extra**: taking needs the shared-setups extra ($4, paid once, free if a setup you share is accepted). Everything up to and including the review is free; the lock appears at the first action that changes your Mac. Paying happens in the browser; Whoprrr re-checks its pass when it comes to the front and on "Check now", then carries on where you were.
+- **Share as a picklsss…**, **Send as a file…** and **Share the update** in a recipe's menu: what goes, what is always left out, a switch per part, limits checked per line before anything is sent. "My shared setups" shows each one's state; updates are a separate step with a note; taking down asks first.
+- **Count what you keep** (opt-in, asked once, changeable on the Extras page): 7 days after a take, one yes or no is sent, worked out on your Mac. **Kitchen time**, for people who share only, rides on the daily update check.
+- **Notices**: an update is offered with the author's note and a before and after (a plain choice between yours and the new one); a setup removed because its author can no longer share is announced with "Put back".
+- **Did it work? / Something is off** after taking, reusing the gear scan's report.
+- **`.whoprrr-setup` files** are registered with the app. Opening one runs the checker every time and refuses a hand-edited file; a file made under your own key always opens free.
+- **Extras page**: what your order includes, what can be added, devices, the count switch, "Check now".
+- Debug builds: `WHOPRRR_SCRIPT` runs JSON steps and takes screenshots for end-to-end checks; the display presets now follow `WHOPPER_DATA_DIR` too.
+
 ### Changed
 - "Update with my current settings" in a recipe's menu and the "Active, changed" chip are replaced by the save bar.
 

@@ -114,10 +114,15 @@ private struct LinesCard: View {
         BrandCard {
             ForEach(Array(plan.lines.enumerated()), id: \.element.id) { i, l in
                 HStack(alignment: .top, spacing: 10) {
+                    // A line that cannot run on this Mac has no switch: its reason and the label say so. One the person switched off keeps its switch.
                     if editable {
-                        Toggle("", isOn: Binding(get: { !l.state.isOff }, set: { s.toggle(l.id, on: $0) }))
-                            .labelsHidden().toggleStyle(.switch).controlSize(.small).disabled(l.state.isOff && !s.switchedOff.contains(l.id))
-                            .accessibilityLabel("\(PicklsssWords.partTitle(l.part)): \(l.title)")
+                        if l.state.isOff && !s.switchedOff.contains(l.id) {
+                            Color.clear.frame(width: 38, height: 1)
+                        } else {
+                            Toggle("", isOn: Binding(get: { !l.state.isOff }, set: { s.toggle(l.id, on: $0) }))
+                                .labelsHidden().toggleStyle(.switch).controlSize(.small)
+                                .accessibilityLabel("\(PicklsssWords.partTitle(l.part)): \(l.title)")
+                        }
                     }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(PicklsssWords.partTitle(l.part)).font(Brand.headline)

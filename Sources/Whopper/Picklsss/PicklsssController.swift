@@ -188,6 +188,10 @@ final class PicklsssController: ObservableObject {
 
     func openPersonalPage() {
         awaitingPurchase = true
+        #if DEBUG
+        // Test runs must not open a browser: say where it would have gone.
+        if ProcessInfo.processInfo.environment["WHOPRRR_NO_BROWSER"] == "1" { FileHandle.standardError.write(Data("would open \(PersonalPage.url(server: license.server))\n".utf8)); return }
+        #endif
         NSWorkspace.shared.open(PersonalPage.url(server: license.server))
     }
 

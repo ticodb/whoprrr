@@ -165,6 +165,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Debug only: open a file at launch, as if it had been double-clicked (scripts cannot drive Finder).
         if let f = ProcessInfo.processInfo.environment["WHOPRRR_OPEN_FILE"] { DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { PicklsssController.shared.openFile(URL(fileURLWithPath: f)) } }
         #endif
+        #if DEBUG
+        DebugDriver.startIfRequested()
+        #endif
         // First run: open the window on the gear scan, which proposes a starter recipe and then leads to Permissions.
         // Without a valid pass the window opens on "Enter your key" instead, and the gear scan follows the activation.
         let welcomed = "gg.tico.whoprrr.welcomed"
@@ -179,7 +182,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Development aid: SDC_DEBUG_WINDOW=1 shows a view in a normal window (WHOPPER_VIEW=quick for the menu-bar panel).
         if ProcessInfo.processInfo.environment["SDC_DEBUG_WINDOW"] == "1" {
             let quick = ProcessInfo.processInfo.environment["WHOPPER_VIEW"] == "quick"
-            let size = quick ? NSSize(width: 400, height: 640) : NSSize(width: 940, height: 700)
+            var size = quick ? NSSize(width: 400, height: 640) : NSSize(width: 940, height: 700)
+            // Screenshots of long pages: WHOPRRR_WINDOW_SIZE=940x1500 makes the debug window taller.
+            if let v = ProcessInfo.processInfo.environment["WHOPRRR_WINDOW_SIZE"]?.split(separator: "x").compactMap({ Double($0) }), v.count == 2 { size = NSSize(width: v[0], height: v[1]) }
             let w = NSWindow(contentRect: NSRect(origin: NSPoint(x: 200, y: 200), size: size), styleMask: [.titled, .closable], backing: .buffered, defer: false)
             w.title = DemoData.isOn ? "Whoprrr" : "Whoprrr (debug window)"
             w.contentView = NSHostingView(rootView: quick ? AnyView(Shared.wrap(QuickView())) : AnyView(Shared.wrap(MainWindowView())))

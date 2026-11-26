@@ -15,6 +15,8 @@ final class ShareSession: ObservableObject, Identifiable {
         var detail: String
         var left: [String]
         var violations: [SharedSetupViolation]
+        /// The recipe has nothing in this part that a shared setup can hold (for example a display preset with no values on this Mac).
+        var empty = false
         var changed: Bool?
         var id: String { part }
     }
@@ -95,10 +97,13 @@ final class ShareSession: ObservableObject, Identifiable {
             if case .update(let r) = mode { partsOn = Set(r.parts).intersection(candidates) }
             else { partsOn = Set(candidates).subtracting(["clipboard"]) }
         }
+        defer { if initial { partsOn.subtract(rows.filter(\.empty).map(\.part)); rebuild() } }
         rows = candidates.map { p in
             let one = run([p])
             let left = one.removed.filter { $0.part == p || $0.part == nil }.map(\.summary) + one.adjusted
-            return PartRow(part: p, detail: Self.detail[p] ?? "", left: left, violations: one.violations, changed: nil)
+            // "A setup must hold at least one part" for a single part means that part came out empty: nothing to share, not a broken limit.
+            let empty = one.setup == nil && !one.violations.isEmpty && one.violations.allSatisfy { $0.line == "parts" }
+            return PartRow(part: p, detail: Self.detail[p] ?? "", left: left, violations: empty ? [] : one.violations, empty: empty, changed: nil)
         }
         export = partsOn.isEmpty ? nil : run(partsOn)
         if case .update = mode, let prev = previous, let now = export?.setup {
