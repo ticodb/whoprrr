@@ -34,7 +34,7 @@ struct AboutView: View {
 
             BrandCard {
                 SectionLabel("Privacy")
-                Text("Everything stays on this Mac. Whoprrr has no account and no analytics. Its only network request is a daily check for a newer version (whoprrr.app), which you can turn off in Features. Clipboard history, rules, recipes and presets are plain files in the data folder; audio is processed live and never recorded. Otherwise it opens a web page only when you press a button above.")
+                Text("Everything stays on this Mac. Whoprrr has no account and no analytics. It makes two kinds of network request: a daily check for a newer version (whoprrr.app), which you can turn off in Features, and a fit report, sent only if you press Send after a gear scan. Clipboard history, rules, recipes and presets are plain files in the data folder; audio is processed live and never recorded. Otherwise it opens a web page only when you press a button above.")
                     .font(Brand.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
 
