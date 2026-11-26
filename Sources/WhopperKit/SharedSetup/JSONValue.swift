@@ -61,7 +61,7 @@ public enum JSONValue: Equatable, Sendable {
         }
     }
 
-    private var foundation: Any {
+    var foundation: Any {
         switch self {
         case .null: return NSNull()
         case .bool(let b): return NSNumber(value: b)

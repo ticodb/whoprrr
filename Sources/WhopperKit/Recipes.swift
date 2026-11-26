@@ -480,6 +480,34 @@ public final class RecipeStore: ObservableObject {
         return failed
     }
 
+    // MARK: The author's original
+
+    /// True for a recipe taken from a shared setup whose original, as first fitted to this Mac, is still held.
+    public func canGoToAuthorsOriginal(_ id: UUID) -> Bool { recipe(id)?.authorsOriginal?.fittedSections.isEmpty == false }
+
+    /// Puts the recipe's content aside in its one previous-version slot and takes the author's original as first fitted to this Mac.
+    /// Like going back, it swaps: the version just put aside is what "Go forward" returns to. The original itself is never
+    /// changed by saving, going back or this. Returns the surfaces that could not be applied, or nil when there is no original.
+    @discardableResult
+    public func goToAuthorsOriginal(_ id: UUID) -> [String]? {
+        guard let i = recipes.firstIndex(where: { $0.id == id }), let orig = recipes[i].authorsOriginal, !orig.fittedSections.isEmpty else { return nil }
+        // Only what the original set: parts it never had (a skipped line later switched on elsewhere) stay as they are.
+        var sections = recipes[i].sections
+        for (k, v) in orig.fittedSections { sections[k] = v }
+        let t = now()
+        recipes[i].previous = RecipeVersion(sections: recipes[i].sections, savedAt: recipes[i].updatedAt, replacedAt: t, isNewer: true)
+        recipes[i].sections = sections
+        recipes[i].updatedAt = orig.takenAt
+        var failed: [String] = []
+        if activeID == id {
+            failed = applySections(recipes[i])
+            applied = snapshot(Set(recipes[i].sections.keys)); clearUnsaved()
+        }
+        save()
+        onChange?()
+        return failed
+    }
+
     // MARK: Editing
 
     public func rename(_ id: UUID, to name: String, symbol: String? = nil) {
