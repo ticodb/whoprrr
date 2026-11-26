@@ -16,6 +16,7 @@ struct RecipesView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             PanelHeader("Recipes", symbol: "fork.knife", subtitle: "Switch your whole setup in one click") {
+                Button("Scan my gear") { nav.page = .welcome }.buttonStyle(.brandQuiet)
                 Button("New recipe") { creating = true }.buttonStyle(.brand)
             }
             if let n = recipes.notice {

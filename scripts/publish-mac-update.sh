@@ -15,6 +15,12 @@ VERSION="$(cat VERSION)"
 LABEL="${RELEASE_LABEL-beta 1}"
 TAG="${VERSION}${LABEL:+-${LABEL// /}}"
 UPDATES_DIR="${UPDATES_DIR:-$HOME/whoprrr-updates}"
+# The site folder can have unreleased site work checked out. This script writes into it and the next step deploys it,
+# so refuse unless it is on main.
+if git -C "$UPDATES_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+  SITE_BRANCH="$(git -C "$UPDATES_DIR" branch --show-current)"
+  [ "$SITE_BRANCH" = "main" ] || { echo "$UPDATES_DIR is on branch '$SITE_BRANCH', not main. Deploying it would put unreleased site work live. Switch it to main first."; exit 1; }
+fi
 BASE_URL="${BASE_URL:-https://whoprrr.app}"
 ZIP="dist/Whoprrr-${TAG}.zip"
 SIGN_UPDATE="$(find .build/artifacts -maxdepth 5 -path '*Sparkle/bin/sign_update' -type f | head -1)"

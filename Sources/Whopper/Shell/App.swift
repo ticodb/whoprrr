@@ -117,11 +117,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DemoData.seedAfterGearLoads()
         if let ap = ProcessInfo.processInfo.environment["WHOPPER_APPEARANCE"] { NSApp.appearance = NSAppearance(named: ap == "light" ? .aqua : .darkAqua) }
         if ProcessInfo.processInfo.environment["WHOPPER_NO_START"] != "1" { Shared.startFeatures() }
-        // First run: open the window on Permissions so setup is the first thing you see.
+        // First run: open the window on the gear scan, which proposes a starter recipe and then leads to Permissions.
         let welcomed = "gg.tico.whoprrr.welcomed"
         if !UserDefaults.standard.bool(forKey: welcomed), ProcessInfo.processInfo.environment["SDC_DEBUG_WINDOW"] != "1" {
             UserDefaults.standard.set(true, forKey: welcomed)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { Shared.showWindow(page: .permissions) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { Shared.showWindow(page: .welcome) }
         }
         // Development aid: SDC_DEBUG_WINDOW=1 shows a view in a normal window (WHOPPER_VIEW=quick for the menu-bar panel).
         if ProcessInfo.processInfo.environment["SDC_DEBUG_WINDOW"] == "1" {

@@ -12,7 +12,7 @@ Reference setup used for development: MacBook Air (M1), macOS 27.2.1, Samsung S3
 | Clipboard | Capture, search, concealed-copy skipping, write-back | Very large images/files; every password manager |
 | Keys and mouse | Rule engine (unit tests), `hidutil` mappings, Logitech HID++ for MX Keys S and MX Ergo | Other keyboards and mice; non-US layouts beyond the layout classes |
 | Logitech | MX Keys S, MX Ergo via Bolt/Unifying | Bluetooth-direct connections, other models |
-| System audio | Equalizer, compressor, limiter and Audio Unit plugins on the built-in speakers | Bluetooth and USB outputs under heavy use, aggregate devices |
+| System audio | Equalizer, compressor, limiter and Audio Unit plugins on the built-in speakers; Bluetooth keep-alive held a Xiaomi speaker awake through a long idle stretch (owner's test, 2026-11-25) | Bluetooth and USB outputs under heavy use, aggregate devices, keep-alive on other speakers |
 | Audio Unit plugins | 102 of 124 installed effect plugins load and process | VST/VST3-only plugins (not supported), mono-only plugins |
 | Whoprrr Mic | Driver against a simulated host and installed on the reference Mac | Other Macs and macOS versions, apps with unusual capture code |
 | Recipes | Capture/apply logic (unit tests), gear detection | Long-term use with many recipes |

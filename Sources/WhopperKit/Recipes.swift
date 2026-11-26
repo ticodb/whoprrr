@@ -149,6 +149,17 @@ public final class RecipeStore: ObservableObject {
         return failed
     }
 
+    /// Puts back settings captured earlier with `snapshot`, without changing which recipe is active. Returns the surfaces that failed.
+    @discardableResult
+    public func restore(_ sections: [String: Data]) -> [String] {
+        var failed: [String] = []
+        for (key, data) in sections { if let s = surfaces[key] { if !s.applyRecipeData(data) { failed.append(s.recipeTitle) } } else { failed.append(key) } }
+        return failed
+    }
+
+    /// Keys of every registered surface.
+    public var surfaceKeys: Set<String> { Set(surfaces.keys) }
+
     /// True when the current settings differ from what the active recipe applied (the recipe has drifted).
     public func isModified(_ id: UUID) -> Bool {
         guard id == activeID, let r = recipes.first(where: { $0.id == id }) else { return false }

@@ -19,7 +19,8 @@ The app checks `https://whoprrr.app/mac/appcast.xml` daily. That folder is the V
 ```sh
 scripts/release.sh                  # dist/Whoprrr-<version>[-label].zip
 scripts/publish-mac-update.sh       # signs the zip, writes the appcast item (notes from CHANGELOG), copies the zip
-cd ~/whoprrr-updates && vercel deploy --prod   # goes live; the script only prints this
+cd ~/whoprrr-updates && vercel deploy --prod   # goes live; the script only prints this. The folder must be on main:
+                                               # the script refuses to stage otherwise
 ```
 
 `publish-mac-update.sh` never deploys. Re-running it for the same build replaces its item. The zip must be the one users download (Sparkle checks the signature of exactly those bytes), so publish the zip you released, do not rebuild in between.
