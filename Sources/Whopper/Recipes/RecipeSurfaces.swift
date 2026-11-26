@@ -34,6 +34,7 @@ extension WindowModel: RecipeSurface {
         guard let s = RecipeJSON.decode(WindowSettings.self, from: data) else { return false }
         settings = s; return true
     }
+    func canonicalRecipeData(_ data: Data) -> Data { RecipeJSON.decode(WindowSettings.self, from: data).flatMap(RecipeJSON.encode) ?? data }
 }
 
 extension ClipboardController: RecipeSurface {

@@ -206,7 +206,7 @@ struct WaitingCards: View {
         if let g = s.grouping, g.lineCount > 0 {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
-                    SectionHead(title: "On now", count: "\(g.onNow.count)")
+                    SectionHead(title: s.applied?.notLive == true ? "Goes on when you apply the recipe" : "On now", count: "\(g.onNow.count)")
                     BrandCard {
                         if g.onNow.isEmpty { Text("Nothing yet").font(Brand.caption).foregroundStyle(.secondary) }
                         ForEach(g.onNowByPart) { b in

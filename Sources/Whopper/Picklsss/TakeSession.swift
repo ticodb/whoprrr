@@ -14,7 +14,7 @@ final class TakeSession: ObservableObject, Identifiable {
     enum Flag: Equatable { case none, asking, flagged, failed(String) }
 
     /// What a take did, so one button can put everything back.
-    struct Applied { var recipeID: UUID?; var name: String; var before: [String: Data]; var parts: [String]; var failed: [String]; var notes: [String]; var updated: Bool; var savedOnly = false }
+    struct Applied { var recipeID: UUID?; var name: String; var before: [String: Data]; var parts: [String]; var failed: [String]; var notes: [String]; var updated: Bool; var savedOnly = false; /* the recipe holds it, but it was not put on this Mac yet */ var notLive = false }
 
     let id = UUID()
     unowned let controller: PicklsssController
@@ -243,11 +243,12 @@ final class TakeSession: ObservableObject, Identifiable {
             r.updatedAt = Date()
             recipes.replaceTaken(r)
             var failed: [String] = []
+            var notLive = false
             if recipes.activeID == rid, !recipes.isModified(rid) { failed = recipes.apply(rid) }
-            else { notes.append("It is saved in “\(old.name)”. Apply that recipe when you are ready.") }
+            else { notLive = true; notes.append("It is saved in “\(old.name)”. Apply that recipe when you are ready.") }
             if let n = item?.card.version { controller.updateVersion(t.picklsssId, n) }
             if case .update(_, let n) = source { controller.dismissNotice(n.id) }
-            return Applied(recipeID: rid, name: old.name, before: [:], parts: parts, failed: failed, notes: notes, updated: true)
+            return Applied(recipeID: rid, name: old.name, before: [:], parts: parts, failed: failed, notes: notes, updated: true, notLive: notLive)
         }
 
         fit.recipe.name = StarterRecipes.uniqueName(setup.title, existing: recipes.recipes.map(\.name))

@@ -171,6 +171,12 @@ public protocol RecipeSurface: AnyObject {
     func captureRecipeData() -> Data?
     /// Replaces this surface's settings. False if the data could not be read.
     @discardableResult func applyRecipeData(_ data: Data) -> Bool
+    /// The same settings in the one form this surface writes today, for comparing. A recipe saved by an earlier version, or in
+    /// another launch, may hold equal settings in different bytes (a set in another order); this brings both to the same bytes.
+    func canonicalRecipeData(_ data: Data) -> Data
+}
+public extension RecipeSurface {
+    func canonicalRecipeData(_ data: Data) -> Data { data }
 }
 
 public enum RecipeJSON {
@@ -346,7 +352,13 @@ public final class RecipeStore: ObservableObject {
     public func changedParts(live: [String: Data]? = nil) -> [String] {
         guard let r = active else { return [] }
         let now = live ?? snapshot(Set(r.sections.keys))
-        return Set(now.keys).union(applied.keys).filter { now[$0] != applied[$0] }
+        let same = { (k: String) -> Bool in
+            guard let a = now[k], let b = self.applied[k] else { return now[k] == self.applied[k] }
+            if a == b { return true }
+            guard let s = self.surfaces[k] else { return false }
+            return s.canonicalRecipeData(a) == s.canonicalRecipeData(b)
+        }
+        return Set(now.keys).union(applied.keys).filter { !same($0) }
             .sorted { (title(forPart: $0), $0) < (title(forPart: $1), $1) }
     }
 
