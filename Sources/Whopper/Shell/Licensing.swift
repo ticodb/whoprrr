@@ -69,6 +69,7 @@ final class LicenseController: ObservableObject {
             }
         }
         if let k = env["WHOPRRR_TEST_KEY"] { Task { await renewIfDue(); await activate(key: k) }; return }
+        if env["WHOPRRR_FORCE_RENEW"] == "1" { Task { await renewIfDue(force: true) }; return }
         #endif
         Task { await renewIfDue() }
         timer = Timer.scheduledTimer(withTimeInterval: 6 * 60 * 60, repeats: true) { [weak self] _ in Task { @MainActor in await self?.renewIfDue() } }
