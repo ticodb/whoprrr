@@ -137,7 +137,7 @@ struct ShareFlowView: View {
                 }
             }
             HStack(spacing: 8) {
-                if s.mode == .file { Button("Save…") { s.saveFile() }.buttonStyle(.brand).disabled(ShareFields.titleProblem(s.title) != nil || ShareFields.lineProblem(s.line) != nil) }
+                if s.mode == .file { Button("Save the file") { s.saveFile() }.buttonStyle(.brand).disabled(ShareFields.titleProblem(s.title) != nil || ShareFields.lineProblem(s.line) != nil) }
                 else { Button(s.isUpdate ? "Share update" : "Share") { Task { await s.send() } }.buttonStyle(.brand).disabled(!s.canSend || s.busy).keyboardShortcut(.defaultAction) }
                 Button("Back") { s.back() }.buttonStyle(.brandQuiet)
             }
@@ -179,9 +179,11 @@ struct ShareFlowView: View {
                 BrandCard {
                     Text(s.savedFile?.lastPathComponent ?? s.fileName).font(Brand.headline).lineLimit(2)
                     Text("\(s.fileSize) · settings only, same exclusions as sharing").font(Brand.caption).foregroundStyle(.secondary)
+                    Text("Saved in the Whoprrr folder in your home folder. Move it wherever you like.").font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    if let copy = s.copiedTo { Text("A copy is in \(copy.deletingLastPathComponent().lastPathComponent).").font(Brand.caption).foregroundStyle(.secondary) }
                     Text("Anyone with Whoprrr can open this file and see how it fits their gear. Nothing was uploaded.").font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
-                HStack { Button("Show in Finder") { if let u = s.savedFile { NSWorkspace.shared.activateFileViewerSelecting([u]) } }.buttonStyle(.brandQuiet); Button("Done") { c.sharing = nil }.buttonStyle(.brand) }
+                HStack { Button("Show in Finder") { if let u = s.savedFile { NSWorkspace.shared.activateFileViewerSelecting([u]) } }.buttonStyle(.brandQuiet); Button("Save a copy somewhere else…") { s.saveCopyElsewhere() }.buttonStyle(.brandQuiet); Button("Done") { c.sharing = nil }.buttonStyle(.brand) }
             } else if let o = s.outcome {
                 resultCard(o)
                 HStack(spacing: 8) {

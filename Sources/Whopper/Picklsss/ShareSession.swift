@@ -39,6 +39,8 @@ final class ShareSession: ObservableObject, Identifiable {
     @Published var message: String?
     @Published var handleProblem: String?
     @Published var closedReason: String?
+    /// Where a copy of the file went, when the person asked for one.
+    @Published var copiedTo: URL?
     @Published private(set) var savedFile: URL?
     @Published private(set) var previous: SharedSetup?
     @Published private(set) var freeExtraNow = false
@@ -188,27 +190,32 @@ final class ShareSession: ObservableObject, Identifiable {
 
     var fileName: String { (titleOrPlaceholder.replacingOccurrences(of: "/", with: "-")) + ".\(SharedSetupFile.fileExtension)" }
 
-    /// Makes the file and asks where to put it. Free for everyone; nothing is uploaded.
+    /// Makes the file in the Whoprrr folder, without asking. Free for everyone; nothing is uploaded.
     func saveFile() {
         guard canContinue, var s = export?.setup, ShareFields.titleProblem(title) == nil, ShareFields.lineProblem(line) == nil else { return }
         s.title = titleOrPlaceholder; s.line = lineOrPlaceholder
         switch SharedSetupFile.encode(s, madeBy: controller.license.currentPass?.kid ?? "") {
         case .failure(let p): message = p.message
         case .success(let data):
-            let panel = NSSavePanel()
-            panel.nameFieldStringValue = fileName
-            panel.allowedContentTypes = []
-            panel.canCreateDirectories = true
-            // The person chooses where it goes, because the next thing they do is attach it or drop it somewhere. The first time,
-            // start in Downloads; after that macOS reopens the folder they used last.
-            let asked = "picklsss.fileSaveAsked"
-            if !UserDefaults.standard.bool(forKey: asked) {
-                panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-                UserDefaults.standard.set(true, forKey: asked)
-            }
-            guard panel.runModal() == .OK, let url = panel.url else { return }
-            do { try data.write(to: url, options: .atomic); savedFile = url; step = .result } catch { message = "The file could not be saved there." }
+            let folder = SharedSetupFiles.folder()
+            do {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let url = SharedSetupFiles.freeURL(in: folder, fileName: fileName)
+                try data.write(to: url, options: .atomic)
+                savedFile = url; step = .result
+            } catch { message = "The file could not be saved in \(folder.path)." }
         }
+    }
+
+    /// "Save a copy somewhere else…": the person picks the place. The first file stays where it is.
+    func saveCopyElsewhere() {
+        guard let from = savedFile, let data = try? Data(contentsOf: from) else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = from.lastPathComponent
+        panel.allowedContentTypes = []
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try data.write(to: url, options: .atomic); copiedTo = url } catch { message = "The copy could not be saved there." }
     }
 
     /// The file's size, for "12 KB".

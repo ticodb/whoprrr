@@ -225,4 +225,17 @@ final class SharedSetupLimitsTests: XCTestCase {
         let r = SharedSetupLimits.check(json: Data(#"{"formatVersion":1,"title":"x","line":"y","parts":["audio"],"gear":[],"requirements":{"plugins":[],"minMacOS":null,"permissions":[]},"settings":{"audio":{"typo":1}}}"#.utf8))
         XCTAssertTrue(r.tampered); XCTAssertEqual(r.limits, ["shape"])
     }
+
+    func testFilesGoToAWhoprrrFolderInTheHomeFolderAndNeverReplaceAnEarlierOne() {
+        let home = URL(fileURLWithPath: "/Users/someone", isDirectory: true)
+        XCTAssertEqual(SharedSetupFiles.folder(environment: [:], home: home).path, "/Users/someone/Whoprrr")
+        XCTAssertEqual(SharedSetupFiles.folder(environment: ["WHOPPER_DATA_DIR": "/tmp/x"], home: home).path, "/tmp/x/Files")
+        let folder = URL(fileURLWithPath: "/Users/someone/Whoprrr", isDirectory: true)
+        var taken: Set<String> = []
+        let exists: (URL) -> Bool = { taken.contains($0.lastPathComponent) }
+        XCTAssertEqual(SharedSetupFiles.freeURL(in: folder, fileName: "Desk.whoprrr-setup", exists: exists).lastPathComponent, "Desk.whoprrr-setup")
+        taken = ["Desk.whoprrr-setup", "Desk 2.whoprrr-setup"]
+        XCTAssertEqual(SharedSetupFiles.freeURL(in: folder, fileName: "Desk.whoprrr-setup", exists: exists).lastPathComponent, "Desk 3.whoprrr-setup")
+        XCTAssertEqual(SharedSetupFiles.freeURL(in: folder, fileName: "a/b:c.whoprrr-setup", exists: { _ in false }).lastPathComponent, "a-b-c.whoprrr-setup")
+    }
 }

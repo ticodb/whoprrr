@@ -65,3 +65,27 @@ public enum SharedSetupFile {
         return Opened(setup: setup, madeBy: madeBy, report: report, problem: nil)
     }
 }
+
+/// Where "Send as a file…" puts its files, without asking: a `Whoprrr` folder in the home folder. Not Documents, Desktop or
+/// Downloads, because macOS shows a permission prompt before an app may write there. The person can move the file or save a
+/// copy elsewhere afterwards. A test or demo run (`WHOPPER_DATA_DIR`) keeps its files inside that folder instead.
+public enum SharedSetupFiles {
+    public static func folder(environment: [String: String] = ProcessInfo.processInfo.environment,
+                              home: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL {
+        if let d = environment["WHOPPER_DATA_DIR"], !d.isEmpty { return URL(fileURLWithPath: d, isDirectory: true).appendingPathComponent("Files", isDirectory: true) }
+        return home.appendingPathComponent("Whoprrr", isDirectory: true)
+    }
+
+    /// A name in `folder` that is not taken: "Desk.whoprrr-setup", then "Desk 2.whoprrr-setup"… An earlier file is never replaced.
+    public static func freeURL(in folder: URL, fileName: String, exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }) -> URL {
+        let clean = fileName.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+        let ext = (clean as NSString).pathExtension, base = (clean as NSString).deletingPathExtension
+        var n = 1
+        while true {
+            let name = (n == 1 ? base : "\(base) \(n)") + (ext.isEmpty ? "" : ".\(ext)")
+            let url = folder.appendingPathComponent(name)
+            if !exists(url) { return url }
+            n += 1
+        }
+    }
+}
