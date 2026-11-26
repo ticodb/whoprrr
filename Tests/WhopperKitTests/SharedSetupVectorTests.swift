@@ -220,6 +220,3 @@ final class SharedSetupLimitsTests: XCTestCase {
         XCTAssertTrue(r.tampered); XCTAssertEqual(r.limits, ["shape"])
     }
 }
-
-/// The table copies a few things from the app's own modules. These tests break when the app changes under them.
-final class SharedSetupTableDriftTests: XCTestCase {}
