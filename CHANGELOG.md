@@ -21,6 +21,11 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 ### Changed
 - "Update with my current settings" in a recipe's menu and the "Active, changed" chip are replaced by the save bar.
 
+## 0.9.0 beta 3: recipes no longer look changed when they are not
+
+### Fixed
+- A recipe you had not touched could show **Active, changed** after Whoprrr was quit and opened again, when its window settings had more than one switched-off shortcut or a custom set of drawer layouts (the starter recipe from the gear scan has one). Those lists were saved in a different order each launch and compared letter for letter. They are now saved in a fixed order, and recipes saved before this update compare correctly too. Nothing about your settings changes.
+
 ## 0.9.0 beta 2: gear scan and activation
 
 ### Added
