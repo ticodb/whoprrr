@@ -8,6 +8,7 @@ struct MainWindowView: View {
     @EnvironmentObject var features: FeatureStore
     @EnvironmentObject var input: InputController
     @EnvironmentObject var nav: WindowNav
+    @EnvironmentObject var recipes: RecipeStore
     @State private var missing = 0
     @ObservedObject private var license = LicenseController.shared
 
@@ -19,15 +20,27 @@ struct MainWindowView: View {
         HStack(spacing: 0) {
             sidebar.frame(width: 232)
             Divider()
-            ScrollView {
-                PageContent(page: nav.page)
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        StoveReminder()
+                        PageContent(page: nav.page)
+                    }
                     .padding(28)
                     .frame(maxWidth: 680, alignment: .topLeading)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+                // Cookin', the save bar and its confirmation: on every page of this window, never in the menu-bar panel.
+                SaveBarArea()
+                    .padding(.horizontal, 28).padding(.bottom, 14)
+                    .frame(maxWidth: 680 + 56, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .frame(minWidth: 860, minHeight: 620)
         .tint(Brand.violetBright)
+        .sheet(item: Binding(get: { nav.windowOpen ? recipes.pendingSwitch : nil },
+                             set: { if $0 == nil, recipes.pendingSwitch != nil { recipes.resolveSwitch(.stay) } })) { AutoSwitchSheet(pending: $0) }
         .onChange(of: features.enabled) { _, _ in
             if case .feature(let f) = nav.page, !features.isEnabled(f) { nav.page = .features }
         }

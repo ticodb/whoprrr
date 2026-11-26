@@ -15,6 +15,7 @@ enum Shared {
     private static var bag = Set<AnyCancellable>()
     static let nav = WindowNav()
     static let recipes = RecipeStore()
+    static let saveBar = SaveBarController(store: recipes)
     static let presets = PresetLibrary()
     private static let featuresSurface = FeaturesSurface(features)
     private static let displaySurface = DisplaySurface(model)
@@ -26,7 +27,7 @@ enum Shared {
     /// Every object the views read from the environment.
     static func wrap<V: View>(_ v: V) -> some View {
         v.environmentObject(model).environmentObject(features).environmentObject(audio).environmentObject(windows)
-            .environmentObject(clipboard).environmentObject(input).environmentObject(nav).environmentObject(recipes).environmentObject(presets)
+            .environmentObject(clipboard).environmentObject(input).environmentObject(nav).environmentObject(recipes).environmentObject(saveBar).environmentObject(presets)
     }
 
     /// The window that hosts the menu-bar drawer (set by the drawer's own view).
@@ -43,10 +44,13 @@ enum Shared {
     /// ⌘-Tab, and goes back to menu-bar only when it closes.
     static func showWindow(page: AppPage? = nil) {
         let drawer = drawerFrame()          // read before activating: activating can close the drawer
+        let wasVisible = window?.isVisible == true
         if let page { nav.page = page }
+        // Something was left unsaved when the window last closed: land on the page that changed (the reminder itself shows there).
+        else if !wasVisible, let part = recipes.takeLandingPart() { nav.page = AppPage.page(forRecipePart: part, features: features) }
+        nav.windowOpen = true
         NSApp.setActivationPolicy(.regular)
         let w: NSWindow
-        let wasVisible = window?.isVisible == true
         if let existing = window { w = existing } else {
             w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 940, height: 700), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                          backing: .buffered, defer: false)
@@ -71,15 +75,37 @@ enum Shared {
     /// Makes every settings surface available to recipes, and switches recipes automatically when the connected gear changes.
     static func startRecipes() {
         for s in [audio as RecipeSurface, windows, clipboard, input, featuresSurface, displaySurface] { recipes.register(s) }
+        watchSettingsForSaveBar()
+        // Anything still unsaved from last time was left on the stove: remember that, and show the bar as soon as the window opens.
+        recipes.noteLeaving()
+        saveBar.start()
         gearTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { _ in
             MainActor.assumeIsolated {
                 let now = Gear.current()
                 let ids = now.map(\.id).sorted()
                 guard ids != lastGear else { return }
                 lastGear = ids
-                if LicenseController.shared.isLicensed, let r = recipes.autoApplyCandidate(connected: now) { recipes.apply(r.id, automatic: true) }
+                // Switches by itself when that loses nothing; with unsaved changes it asks first (the question shows in the main window).
+                if LicenseController.shared.isLicensed { recipes.considerAutoSwitch(connected: now) }
             }
         }
+    }
+
+    /// Tells the save bar whenever a setting a recipe holds may have changed. Notifications are merged into one check a moment later,
+    /// and ignored while a surface is being read for a recipe (reading some of them touches their own state).
+    private static var checkPending = false
+    private static func watchSettingsForSaveBar() {
+        let ping: () -> Void = {
+            guard !recipes.isCapturing, !checkPending else { return }
+            checkPending = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { checkPending = false; saveBar.settingsDidChange() }
+        }
+        audio.$settings.dropFirst().sink { _ in ping() }.store(in: &bag)
+        windows.$settings.dropFirst().sink { _ in ping() }.store(in: &bag)
+        clipboard.$settings.dropFirst().sink { _ in ping() }.store(in: &bag)
+        input.$settings.dropFirst().sink { _ in ping() }.store(in: &bag)
+        features.$enabled.dropFirst().sink { _ in ping() }.store(in: &bag)
+        model.$lastPresetName.dropFirst().sink { _ in ping() }.store(in: &bag)
     }
 
     /// Starts every installed feature's background work, and follows installs/uninstalls.
@@ -102,13 +128,21 @@ enum Shared {
 
 @MainActor
 final class MainWindowDelegate: NSObject, NSWindowDelegate {
-    func windowWillClose(_ notification: Notification) { NSApp.setActivationPolicy(.accessory) }
+    /// Closing the window asks nothing. The app keeps running, and anything unsaved stays live and is remembered as left on the stove.
+    func windowWillClose(_ notification: Notification) {
+        Shared.nav.windowOpen = false
+        Shared.recipes.noteLeaving()
+        NSApp.setActivationPolicy(.accessory)
+    }
 }
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var debugWindow: NSWindow?
-    func applicationWillTerminate(_ notification: Notification) { Shared.input.shutdown() }
+    func applicationWillTerminate(_ notification: Notification) {
+        Shared.recipes.noteLeaving()          // unsaved changes are still there next time, with the reminder
+        Shared.input.shutdown()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)      // menu bar only, no Dock icon
@@ -141,6 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             w.contentView = NSHostingView(rootView: quick ? AnyView(Shared.wrap(QuickView())) : AnyView(Shared.wrap(MainWindowView())))
             w.makeKeyAndOrderFront(nil)
             w.isReleasedWhenClosed = false
+            Shared.nav.windowOpen = !quick
             debugWindow = w
             NSApp.activate(ignoringOtherApps: true)
             // SDC_SNAPSHOT=/path.png renders the view to a PNG (no screen-recording permission needed).

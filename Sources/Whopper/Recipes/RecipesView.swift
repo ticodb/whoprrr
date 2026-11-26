@@ -68,7 +68,7 @@ struct RecipesView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 8) {
                         Text(r.name).font(Brand.display(17, .semibold))
-                        if isActive { StatusChip(text: modified ? "Active, changed" : "Active", tone: modified ? .warn : .good) }
+                        if isActive { StatusChip(text: "Active", tone: .good) }
                     }
                     Text(summary(r)).font(Brand.caption).foregroundStyle(.secondary)
                     if r.devices.isEmpty { Text("Not tied to any gear").font(Brand.caption).foregroundStyle(.secondary) }
@@ -80,7 +80,11 @@ struct RecipesView: View {
                         Button(isActive && !modified ? "Applied" : isActive ? "Reapply" : "Apply") { recipes.apply(r.id) }
                             .buttonStyle(.brand).disabled(isActive && !modified)
                         Menu {
-                            Button("Update with my current settings") { recipes.updateFromCurrent(r.id) }
+                            if let prev = r.previous {
+                                Button(RecipeWording.goBackTitle(prev, now: Date())) { goBack(r) }
+                            } else {
+                                Button("Go back to the version before the last save") {}.disabled(true)
+                            }
                             Button("Update gear to what is connected") { recipes.setDevices(r.id, connected) }
                             Button("Rename or change icon…") { renaming = r }
                             Divider()
@@ -97,6 +101,10 @@ struct RecipesView: View {
                     .font(Brand.caption).foregroundStyle(.orange)
             }
         }
+    }
+
+    private func goBack(_ r: Recipe) {
+        if let failed = recipes.goBack(r.id), !failed.isEmpty { recipes.notice = "Went back, except \(failed.joined(separator: ", "))" }
     }
 
     private func summary(_ r: Recipe) -> String {

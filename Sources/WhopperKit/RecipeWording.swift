@@ -61,7 +61,7 @@ public enum RecipeWording {
 
     // MARK: Auto-switch
 
-    public static func switchQuestionTitle(current: String) -> String { "\(current) has changes you have not saved" }
+    public static let switchQuestionTitle = "Your gear changed"
     public static func switchQuestionDetail(candidate: String, current: String, parts: [String]) -> String {
         "\(candidate) fits what is connected now. \(current) has unsaved changes to \(list(parts))."
     }
