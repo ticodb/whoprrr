@@ -230,7 +230,7 @@ private struct Checker {
             var role = "", model = ""
             if let r = go["role"]?.string {
                 role = r
-                if r.range(of: #"^[a-z]{1,30}$"#, options: .regularExpression) == nil { add(join(p, "role"), "gear-role", "Gear item \(i + 1) has a role that is not a short lowercase word (up to \(T.gearRoleMax) letters).") }
+                if r.range(of: #"^[a-z]{1,30}\z"#, options: .regularExpression) == nil { add(join(p, "role"), "gear-role", "Gear item \(i + 1) has a role that is not a short lowercase word (up to \(T.gearRoleMax) letters).") }
             } else if go["role"] != nil { add(join(p, "role"), "shape", "Gear item \(i + 1) has a role that is not text.", tampered: true) }
             model = text(go, "model", p, max: T.gearModelMax, what: "The model of gear item \(i + 1)", serials: true) ?? ""
             gearRoles.append(role); gearModels.append(model)
@@ -247,7 +247,7 @@ private struct Checker {
             }
         }
         if let m = r["minMacOS"], !m.isNull {
-            if let s = m.string, s.range(of: #"^[0-9]{1,2}(\.[0-9]{1,2})?$"#, options: .regularExpression) != nil {} else {
+            if let s = m.string, s.range(of: #"^[0-9]{1,2}(\.[0-9]{1,2})?\z"#, options: .regularExpression) != nil {} else {
                 add("requirements.minMacOS", "shape", "The macOS version must look like 14 or 14.2, or be empty.", tampered: true)
             }
         }
@@ -468,7 +468,7 @@ private struct Checker {
         if o["ignoredApps"] != nil, let a = list(o, "ignoredApps", p, max: T.ignoredAppsMax, what: "The ignored apps") {
             var have = Set<String>()
             for (i, x) in a.enumerated() {
-                guard let s = x.string, s.range(of: #"^[A-Za-z0-9][A-Za-z0-9.\-]{0,99}$"#, options: .regularExpression) != nil else {
+                guard let s = x.string, s.range(of: #"^[A-Za-z0-9][A-Za-z0-9.\-]{0,99}\z"#, options: .regularExpression) != nil else {
                     add(idx(join(p, "ignoredApps"), i), "shape", "An ignored app is not written as an app identifier.", tampered: true); continue
                 }
                 have.insert(s)
@@ -535,14 +535,14 @@ private struct Checker {
             if let so = fields(s, sp, required: ["mode", "apps"], what: "\(what) scope") {
                 _ = choice(so, "mode", sp, T.scopeModes, what: "\(what) scope mode")
                 if let a = list(so, "apps", sp, max: 50, what: "\(what) apps") {
-                    for (i, x) in a.enumerated() where x.string?.range(of: #"^[A-Za-z0-9][A-Za-z0-9.\-]{0,99}$"#, options: .regularExpression) == nil {
+                    for (i, x) in a.enumerated() where x.string?.range(of: #"^[A-Za-z0-9][A-Za-z0-9.\-]{0,99}\z"#, options: .regularExpression) == nil {
                         add(idx(join(sp, "apps"), i), "shape", "\(what) names an app in a form Whoprrr does not write.", tampered: true)
                     }
                 }
             }
         }
         if let l = r["layer"] {
-            if let s = l.string, s.range(of: #"^[A-Za-z0-9 _\-]{1,24}$"#, options: .regularExpression) != nil {} else {
+            if let s = l.string, s.range(of: #"^[A-Za-z0-9 _\-]{1,24}\z"#, options: .regularExpression) != nil {} else {
                 add(join(p, "layer"), "layer-name", "\(what) uses a layer name that is not 1 to 24 letters, digits, spaces, dashes or underscores.")
             }
         }
@@ -578,7 +578,7 @@ private struct Checker {
             if let c = fields(v, p, required: ["type", "mods"], what: what) { _ = names(c, "mods", p, T.modifierNames, max: 5, what: "\(what) modifiers") }
         case "layer":
             if let c = fields(v, p, required: ["type", "name"], what: what) {
-                if let s = c["name"]?.string, s.range(of: #"^[A-Za-z0-9 _\-]{1,24}$"#, options: .regularExpression) != nil {} else {
+                if let s = c["name"]?.string, s.range(of: #"^[A-Za-z0-9 _\-]{1,24}\z"#, options: .regularExpression) != nil {} else {
                     add(join(p, "name"), "layer-name", "\(what) uses a layer name that is not 1 to 24 letters, digits, spaces, dashes or underscores.")
                 }
             }

@@ -112,6 +112,12 @@ final class SharedSetupLimitsTests: XCTestCase {
         XCTAssertEqual(m, "Equalizer: bass +12 dB at 64 Hz. Shared setups cannot boost more than +6 dB, so nobody’s speakers or ears are hurt.")
     }
 
+    func testATrailingLineBreakInAGearRoleIsRefused() {
+        XCTAssertTrue(check(full.with("gear.0.role", .string("speaker"))).violations.allSatisfy { $0.limit != "gear-role" })
+        XCTAssertTrue(check(full.with("gear.0.role", .string("speakerss\n"))).violations.contains { $0.limit == "gear-role" })
+        XCTAssertTrue(check(full.with("gear.0.role", .string("speakerss\r\n"))).violations.contains { $0.limit == "gear-role" })
+    }
+
     func testCutsAreNotLimited() {
         XCTAssertTrue(check(base.with("settings.audio.equalizer.curve.bands.0.gainDb", .number(-12))).ok)
     }
