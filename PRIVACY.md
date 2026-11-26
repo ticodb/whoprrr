@@ -2,7 +2,7 @@
 
 **Short version: Whoprrr keeps everything on your Mac and talks to nobody.**
 
-- No account, no analytics, no crash reporting, no update pinger. The app contains no networking code. The only time it opens a web page is when you press a button such as "Report a problem", and then your browser does it.
+- No account, no analytics, no crash reporting. The only network request the app makes is the update check: once a day (or when you choose Check for Updates…) it downloads `https://whoprrr.app/mac/appcast.xml` through Sparkle. That request carries the app version and macOS version in its User-Agent, as any HTTP request does, and no system profile (Sparkle's optional profiling is off). Turn it off with "Check for updates automatically" in Features. Updates are verified against an EdDSA key built into the app before they install. Otherwise the app opens a web page only when you press a button such as "Report a problem", and then your browser does it.
 - Audio is processed live in memory. It is never recorded or written to disk, and never leaves your Mac.
 - The camera is used only while you run camera-assisted display matching; frames are analysed in memory and not saved.
 

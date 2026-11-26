@@ -5,6 +5,7 @@ import WhopperKit
 struct FeaturesHubView: View {
     @EnvironmentObject var features: FeatureStore
     @State private var login = LoginItem.isEnabled
+    @ObservedObject private var updates = UpdateController.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -33,6 +34,12 @@ struct FeaturesHubView: View {
                 BrandCard {
                     Toggle("Open Whoprrr at login", isOn: Binding(get: { login }, set: { login = LoginItem.set($0) ? $0 : login })).font(Brand.display(15, .semibold))
                     Text("Needed for mic pinning and keep-alive to work after a restart.").font(Brand.caption2).foregroundStyle(.secondary)
+                }
+            }
+            if updates.isAvailable {
+                BrandCard {
+                    Toggle("Check for updates automatically", isOn: Binding(get: { updates.automaticallyChecks }, set: { updates.automaticallyChecks = $0 })).font(Brand.display(15, .semibold))
+                    Text("Once a day Whoprrr asks whoprrr.app whether a newer version exists. Nothing else is sent. Updates are verified before they install.").font(Brand.caption2).foregroundStyle(.secondary)
                 }
             }
         }

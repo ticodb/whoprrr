@@ -14,6 +14,7 @@ struct QuickView: View {
     @EnvironmentObject var clipboard: ClipboardController
     @EnvironmentObject var display: AppModel
     @EnvironmentObject var recipes: RecipeStore
+    @ObservedObject private var updates = UpdateController.shared
     @State private var missing: [Permission] = []
     private let checker: PermissionChecking = LivePermissionChecker()
 
@@ -195,6 +196,10 @@ struct QuickView: View {
     private var footer: some View {
         HStack {
             Button("Settings…") { Shared.showWindow() }.buttonStyle(.brand).keyboardShortcut(",")
+            if updates.isAvailable {
+                Button("Check for Updates…") { updates.checkForUpdates() }.buttonStyle(.plain).font(Brand.subheadline).foregroundStyle(.secondary)
+                    .disabled(!updates.canCheck)
+            }
             Spacer()
             Button("Quit") { NSApp.terminate(nil) }.buttonStyle(.plain).font(Brand.subheadline).foregroundStyle(.secondary).keyboardShortcut("q")
         }

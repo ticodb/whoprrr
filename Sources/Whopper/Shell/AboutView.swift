@@ -34,7 +34,7 @@ struct AboutView: View {
 
             BrandCard {
                 SectionLabel("Privacy")
-                Text("Everything stays on this Mac. Whoprrr has no account, no analytics and no network code. Clipboard history, rules, recipes and presets are plain files in the data folder; audio is processed live and never recorded. The only time it opens a web page is when you press a button above.")
+                Text("Everything stays on this Mac. Whoprrr has no account and no analytics. Its only network request is a daily check for a newer version (whoprrr.app), which you can turn off in Features. Clipboard history, rules, recipes and presets are plain files in the data folder; audio is processed live and never recorded. Otherwise it opens a web page only when you press a button above.")
                     .font(Brand.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
 

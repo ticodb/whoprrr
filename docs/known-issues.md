@@ -2,7 +2,8 @@
 
 ## Distribution
 - Builds are **not notarized**. macOS blocks the first launch (see [install.md](install.md)). They are ad-hoc signed, so macOS asks for permissions again after each update.
-- No automatic updates yet. Watch the Releases page.
+- Automatic updates (Sparkle) are built in, but because builds are ad-hoc signed, **each update changes the app's code signature and macOS may drop its privacy grants** (Accessibility, Input Monitoring, Microphone, Camera, Audio capture). After an update, open Whoprrr's Permissions page and grant again if a feature stops working. Developer ID signing (see [releasing.md](releasing.md)) keeps the grants across updates.
+- Whoprrr checks `https://whoprrr.app/mac/appcast.xml` once a day. Turn it off in Features > "Check for updates automatically", or use "Check for Updates…" in the menu-bar panel.
 
 ## Keys and mouse
 - Keys typed into password fields and at the login window cannot be remapped (macOS rule).

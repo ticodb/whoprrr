@@ -14,6 +14,7 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 - **Audio**: system-wide equalizer per output device without a driver (Core Audio process tap), compressor and limiter, Audio Unit plugins on the system output, mic pinning, Bluetooth keep-alive.
 - **Microphone**: "Whoprrr Mic" virtual device with gain, high-pass, gate, compressor, equalizer and Audio Unit plugins for every app.
 - Every mouse and Logitech button has an Assign menu with everyday actions (navigation, tabs, edit, scrolling, media, system). The mouse's Back and Forward buttons do Back and Forward in every app: Whoprrr presses the app's own Back/Forward menu item, which is the same on every keyboard layout (a Spanish layout has ⌘Ñ and ⌘´ instead of ⌘[ and ⌘]), and only falls back to a key shortcut when an app has no such menu item.
+- **Automatic updates** (Sparkle 2): a daily check for a newer version, "Check for Updates…" in the menu-bar panel, and a switch in Features. Updates are verified with an EdDSA signature.
 - Menu-bar panel for quick actions, main window for setup, About page with diagnostics and acknowledgments.
 
 ### Known limits

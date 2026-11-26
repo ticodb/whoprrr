@@ -13,6 +13,9 @@ let package = Package(
         .executable(name: "inputprobe", targets: ["inputprobe"]),
         .executable(name: "clipprobe", targets: ["clipprobe"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.1"),
+    ],
     targets: [
         // Vendored m1ddc transport (MIT) behind a tiny C API. Private macOS calls stay in here.
         .target(
@@ -38,7 +41,7 @@ let package = Package(
         .executableTarget(name: "inputprobe", dependencies: ["InputCore"], path: "Sources/inputprobe"),
         .executableTarget(name: "windowprobe", dependencies: ["WindowCore"], path: "Sources/windowprobe"),
         .executableTarget(name: "audioprobe", dependencies: ["AudioCore"], path: "Sources/audioprobe"),
-        .executableTarget(name: "Whopper", dependencies: ["DisplayCore", "WhopperKit", "AudioCore", "WindowCore", "ClipboardCore", "InputCore", "LogitechCore"], path: "Sources/Whopper"),
+        .executableTarget(name: "Whopper", dependencies: ["DisplayCore", "WhopperKit", "AudioCore", "WindowCore", "ClipboardCore", "InputCore", "LogitechCore", .product(name: "Sparkle", package: "Sparkle")], path: "Sources/Whopper"),
         .testTarget(name: "DisplayCoreTests", dependencies: ["DisplayCore"], path: "Tests/DisplayCoreTests"),
         .testTarget(name: "AudioCoreTests", dependencies: ["AudioCore"], path: "Tests/AudioCoreTests"),
         .testTarget(name: "WindowCoreTests", dependencies: ["WindowCore"], path: "Tests/WindowCoreTests"),
