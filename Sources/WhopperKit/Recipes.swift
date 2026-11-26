@@ -95,6 +95,33 @@ public struct RecipeVersion: Codable, Equatable, Sendable {
     }
 }
 
+/// A line of a taken shared setup that was switched off when it was fitted to this Mac, and why, so it can be switched on later.
+public struct SkippedLine: Codable, Equatable, Sendable, Identifiable {
+    public var id: String
+    /// The part it belongs to ("audio", "keys"…).
+    public var part: String
+    public var title: String
+    /// In plain words: "Plugin “Pro-Q 3” is not installed".
+    public var reason: String
+    public init(id: String, part: String, title: String, reason: String) { self.id = id; self.part = part; self.title = title; self.reason = reason }
+}
+
+/// The setup as its author made it and as it first fitted this Mac. Kept only on recipes taken from a shared setup, and apart
+/// from `previous`: saving, going back and going forward never touch it.
+public struct AuthorsOriginal: Codable, Equatable, Sendable {
+    public var title: String
+    /// Opaque: who made it, as the shelf or the file said.
+    public var madeBy: String?
+    /// The shared setup document, as taken (`SharedSetup` JSON).
+    public var setup: Data
+    /// The recipe's settings as they first fitted this Mac.
+    public var fittedSections: [String: Data]
+    public var takenAt: Date
+    public init(title: String, madeBy: String?, setup: Data, fittedSections: [String: Data], takenAt: Date) {
+        self.title = title; self.madeBy = madeBy; self.setup = setup; self.fittedSections = fittedSections; self.takenAt = takenAt
+    }
+}
+
 /// A named setup for a set of gear: a snapshot of settings per surface (audio, windows, clipboard, keys…) that can be
 /// applied in one click. Each section is that surface's own settings as JSON, so recipes survive new fields.
 /// It behaves like a document: the settings are saved into it, and it keeps one previous version.
@@ -111,10 +138,17 @@ public struct Recipe: Codable, Identifiable, Equatable, Sendable {
     public var autoApply = false
     /// The version before the last save (or the one a "go back" put aside). One only, swapped with the current one.
     public var previous: RecipeVersion?
+    /// Only for recipes taken from a shared setup: the author's version, as first fitted. A second slot, apart from `previous`.
+    public var authorsOriginal: AuthorsOriginal?
+    /// Only for recipes taken from a shared setup: the lines that were switched off for this Mac.
+    public var skippedLines: [SkippedLine]?
 
     public init(name: String, symbol: String = "fork.knife", devices: [DeviceSignature] = [], sections: [String: Data] = [:], autoApply: Bool = false) {
         self.name = name; self.symbol = symbol; self.devices = devices; self.sections = sections; self.autoApply = autoApply
     }
+
+    /// The lines of the taken setup that are still switched off.
+    public var skipped: [SkippedLine] { skippedLines ?? [] }
 
     /// How the recipe's gear compares with what is connected right now.
     public func gear(connected: [DeviceSignature]) -> (present: [DeviceSignature], missing: [DeviceSignature]) {
@@ -250,6 +284,25 @@ public final class RecipeStore: ObservableObject {
         recipes.append(r); activeID = r.id; applied = r.sections; clearUnsaved(); save()
         onChange?()
         return r
+    }
+
+    /// Adds a recipe made from a shared setup (see `SharedSetupFit`). It does not become active and does not switch by itself.
+    @discardableResult
+    public func addTaken(_ recipe: Recipe) -> Recipe {
+        var r = recipe
+        r.autoApply = false; r.createdAt = now(); r.updatedAt = r.createdAt
+        recipes.append(r)
+        save()
+        onChange?()
+        return r
+    }
+
+    /// Replaces a recipe's stored copy (for example after a skipped line was switched on). Keeps its previous version and the author's original.
+    public func replaceTaken(_ recipe: Recipe) {
+        guard let i = recipes.firstIndex(where: { $0.id == recipe.id }) else { return }
+        recipes[i] = recipe
+        save()
+        onChange?()
     }
 
     /// Applies each section of the recipe to its surface. Returns the surfaces that could not be applied.
