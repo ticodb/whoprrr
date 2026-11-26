@@ -221,7 +221,6 @@ private struct Checker {
 
     mutating func checkGear(_ o: [String: JSONValue]) {
         guard let a = list(o, "gear", "", max: T.gearMax, what: "The gear list") else { return }
-        if a.count > T.gearMax { add("gear", "gear-count", "A setup can name at most \(T.gearMax) pieces of gear.") }
         for (i, g) in a.enumerated() {
             let p = idx("gear", i)
             guard let go = fields(g, p, required: ["role", "model"], what: "Gear item \(i + 1)") else { gearRoles.append(""); gearModels.append(""); continue }

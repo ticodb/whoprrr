@@ -80,6 +80,14 @@ public enum SharedSetupTable {
 
     // MARK: Names
 
+    /// Every rule the checker can name in a violation. Each one appears in at least one test vector.
+    public static let ruleNames = [
+        "format", "shape", "size", "text-length", "no-personal-text", "range", "gear-role", "gear-ref",
+        "boost-6db", "boost-curve", "limiter-on", "limiter-ceiling", "keepawake-level", "keepawake-frequency",
+        "display-codes", "keys-emergency-off", "keys-protected-key", "keys-primary-click", "keys-no-run", "keys-command",
+        "keys-hid", "layer-name", "shortcut-safe", "clipboard-ignore-list",
+    ]
+
     /// The parts of a setup, in the order they are written. These are the words the shelf uses.
     public static let parts = ["audio", "microphone", "windows", "keys", "clipboard", "display"]
     public static let bandKinds = ["peak", "lowShelf", "highShelf", "highPass", "lowPass"]
