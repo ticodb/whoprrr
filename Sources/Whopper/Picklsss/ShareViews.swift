@@ -14,8 +14,8 @@ struct ShareFlowView: View {
         ScrollView { content }
             .frame(width: 560, height: 640)
             .task {
-                // Someone who has shared before may have had sharing closed since: ask before they fill anything in.
-                if s.mode != .file, c.handle != nil { await c.refreshMine() }
+                // Ask the shelf first: sharing may have been closed since, and a Mac that lost its data learns the handle this key already has.
+                if s.mode != .file { await c.refreshMine(); if s.handleText.isEmpty, let h = c.handle { s.handleText = h } }
                 if s.isUpdate { await s.loadPrevious() }
             }
     }
