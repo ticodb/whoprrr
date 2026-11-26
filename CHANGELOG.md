@@ -4,6 +4,8 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 
 ## Unreleased
 
+## 0.9.0 beta 2: gear scan and activation
+
 ### Added
 - **Recipes behave like documents**: while the active recipe differs from your settings, the main window shows a save bar on every page (Save, Save as new recipe, Put back). It waits until you have left the settings alone for 2 seconds; until then only a small "Cookin'" label shows. After saving there is a confirmation with Undo, and every recipe keeps the version from before its last save: "Go back to the version before…" in its menu swaps the two, so going back can itself be undone.
 - **Unsaved changes are never dropped**: closing the window asks nothing and the change stays live, also after a quit. The next time the window opens it lands on the page that changed with a reminder, until you save or put back. When gear changes would switch recipes automatically and the current one has unsaved changes, Whoprrr asks first (save then switch, switch without saving, or stay).
