@@ -46,6 +46,8 @@ final class PicklsssController: ObservableObject {
     @Published private(set) var awaitingPurchase = false
     private var lastCheck = Date.distantPast
     private var becameActive: NSObjectProtocol?
+    private var woke: NSObjectProtocol?
+    private var dailyTimer: Timer?
 
     // Notices and the cook's page
     @Published private(set) var notices: [ShelfNotice] = []
@@ -77,6 +79,17 @@ final class PicklsssController: ObservableObject {
         }
         recomputeNotices()
         noteActive()
+        // The daily round's own clock: shortly after launch, every six hours, and after waking. Screenshot and test launches
+        // (WHOPPER_NO_START) stay quiet unless WHOPRRR_DAILY_TIMER=1 asks for it.
+        let env = ProcessInfo.processInfo.environment
+        if env["WHOPPER_NO_START"] != "1" || env["WHOPRRR_DAILY_TIMER"] == "1" {
+            let first = Double(env["WHOPRRR_DAILY_TIMER_FIRST"] ?? "") ?? 90
+            DispatchQueue.main.asyncAfter(deadline: .now() + first) { [weak self] in Task { @MainActor in await self?.runDailyIfDue(fromUpdateCheck: false) } }
+            dailyTimer = Timer.scheduledTimer(withTimeInterval: 6 * 60 * 60, repeats: true) { [weak self] _ in Task { @MainActor in await self?.runDailyIfDue(fromUpdateCheck: false) } }
+            woke = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in await self?.runDailyIfDue(fromUpdateCheck: false) }
+            }
+        }
         #if DEBUG
         if ProcessInfo.processInfo.environment["WHOPRRR_DAILY_NOW"] == "1" { Task { await runDaily() } }
         #endif
@@ -369,7 +382,16 @@ final class PicklsssController: ObservableObject {
 
     // MARK: The daily check
 
-    /// Run by the update check that already happens once a day (the Sparkle callback), so there is no timer of its own.
+    /// The round is due once a day. Two things ask for it: the update check (the Sparkle callback), and a timer of this class's
+    /// own, so that switching automatic update checks off does not also stop removal notices, day-7 answers and kitchen time.
+    /// The timer only speaks for someone who uses shared setups (took one or shared one); nobody else's Mac makes a call
+    /// because of it.
+    func runDailyIfDue(fromUpdateCheck: Bool) async {
+        guard DailyCheck.isDue(last: state.lastDaily, now: Date()) else { return }
+        if !fromUpdateCheck { guard !state.takes.isEmpty || !state.shared.isEmpty else { return } }
+        await runDaily()
+    }
+
     /// Asks for notices, sends any day-7 answer that is due, and, only for someone who has a public shared setup, counts kitchen time.
     func runDaily() async {
         guard license.currentPass != nil else { return }

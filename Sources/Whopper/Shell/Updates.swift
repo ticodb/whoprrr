@@ -5,10 +5,11 @@ import Sparkle
 /// (written by scripts/build-app.sh). Sparkle only runs inside a packaged .app that carries those keys, so
 /// `swift run`, tests and the screenshot/demo modes never contact the network.
 /// Tells the shelf code that the daily update check ran, so what the shelf needs once a day (notices, the day-7 answer, kitchen
-/// time for people who share) rides on that check and has no timer of its own.
+/// time for people who share) usually rides on that check. The shelf code keeps a timer of its own too, for people who switched
+/// automatic update checks off; whichever comes first does the day's round.
 final class DailyCheckHook: NSObject, SPUUpdaterDelegate {
     func updater(_ updater: SPUUpdater, didFinishLoading appcast: SUAppcast) {
-        Task { @MainActor in await PicklsssController.shared.runDaily() }
+        Task { @MainActor in await PicklsssController.shared.runDailyIfDue(fromUpdateCheck: true) }
     }
 }
 

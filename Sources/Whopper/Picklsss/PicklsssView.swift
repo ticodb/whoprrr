@@ -141,7 +141,7 @@ struct MineView: View {
                         Spacer(minLength: 0)
                     }
                     Text("\(PicklsssWords.cookKeeps(cook.keeps)) · \(PicklsssWords.kitchenDays(cook.kitchenDays))").font(Brand.subheadline).foregroundStyle(.secondary)
-                    Text("Your handle, keeps and kitchen time are public. A keep is someone who took your picklsss and was still using it 7 days later. Kitchen time is the days this Mac checked for an update; it is shown beside your rank and earns nothing.")
+                    Text("Your handle, keeps and kitchen time are public. A keep is someone who took your picklsss and was still using it 7 days later. Kitchen time is the days Whoprrr was running on this Mac and checked in; it is shown beside your rank and earns nothing.")
                         .font(Brand.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }

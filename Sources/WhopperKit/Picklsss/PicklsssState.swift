@@ -170,6 +170,14 @@ public enum DailyCheck {
         return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
     }
 
+    /// The daily round (notices, day-7 answers, kitchen time) is due when none ran in the last 20 hours. Twenty, not 24, so a Mac
+    /// opened a little earlier each morning still gets its round every day. A clock set back counts as due.
+    public static func isDue(last: Date?, now: Date, every: TimeInterval = 20 * 60 * 60) -> Bool {
+        guard let last else { return true }
+        let gap = now.timeIntervalSince(last)
+        return gap >= every || gap < 0
+    }
+
     /// Kitchen time: once per UTC day, and only for a person who has at least one public setup. Nobody else's app makes the call.
     public static func shouldCallDay(hasPublicSetup: Bool, lastCall: String?, now: Date) -> Bool {
         hasPublicSetup && lastCall != utcDay(now)

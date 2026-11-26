@@ -405,4 +405,13 @@ final class RequirementsTests: XCTestCase {
         XCTAssertFalse(Requirements.atLeast("9.9", "10")); XCTAssertTrue(Requirements.atLeast("15", "14.9"))
     }
     func testNothingNeededMeansNoRows() { XCTAssertEqual(Requirements.rows(SharedRequirements(), env: ReceiverEnvironment()), []) }
+
+    func testTheDailyRoundIsDueOnceADayWhicheverClockAsks() {
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertTrue(DailyCheck.isDue(last: nil, now: t0), "never ran")
+        XCTAssertFalse(DailyCheck.isDue(last: t0, now: t0.addingTimeInterval(60)), "the update check and the timer on the same morning make one round")
+        XCTAssertFalse(DailyCheck.isDue(last: t0, now: t0.addingTimeInterval(19 * 3600)))
+        XCTAssertTrue(DailyCheck.isDue(last: t0, now: t0.addingTimeInterval(20 * 3600)), "a little earlier the next morning still counts")
+        XCTAssertTrue(DailyCheck.isDue(last: t0, now: t0.addingTimeInterval(-3600)), "a clock set back does not block the round")
+    }
 }
