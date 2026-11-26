@@ -63,6 +63,13 @@ final class StarterRecipeTests: XCTestCase {
         XCTAssertNil(line(p, "input.backForward"))
     }
 
+    func testAMicrophoneBeatsAWebcamForTheInput() {
+        let cam = GearScan.Audio(uid: "cam", name: "Insta360 Link 2", transport: "usb", hasInput: true, hasOutput: false)
+        let mic = GearScan.Audio(uid: "yeti", name: "Yeti Stereo Microphone", transport: "usb", hasInput: true, hasOutput: true)
+        XCTAssertEqual(line(StarterRecipes.plan(for: GearScan(mac: m1, screens: [laptop], audio: [cam, mic])), "audio.pin")?.action, .pinInput(uid: "yeti"))
+        XCTAssertEqual(line(StarterRecipes.plan(for: GearScan(mac: m1, screens: [laptop], audio: [cam])), "audio.pin")?.action, .pinInput(uid: "cam"))
+    }
+
     func testOpinionatedLinesStartOff() {
         let p = StarterRecipes.plan(for: GearScan(mac: m1, screens: [laptop]))
         XCTAssertEqual(line(p, "input.capsHyper")?.on, false)

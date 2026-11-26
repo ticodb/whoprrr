@@ -26,9 +26,21 @@ struct WelcomeView: View {
             }
         }
         .onAppear {
-            // Screenshots: WHOPPER_WELCOME_STEP=found|plan opens on that step with a scan already made.
+            // Screenshots and hardware checks: WHOPPER_WELCOME_STEP=found|plan|applied|undone opens on that step once the gear has
+            // had a few seconds to show up. "applied" applies the default proposal; "undone" applies it and puts everything back.
             guard scan == nil, let want = ProcessInfo.processInfo.environment["WHOPPER_WELCOME_STEP"] else { return }
-            runScan(); step = want == "plan" ? .plan : .found
+            let wait = Double(ProcessInfo.processInfo.environment["WHOPPER_WELCOME_WAIT"] ?? "") ?? 0
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
+                runScan()
+                switch want {
+                case "plan": step = .plan
+                case "applied", "undone":
+                    guard let plan else { return }
+                    let a = Starter.apply(plan, accepted: accepted)
+                    if want == "undone" { Starter.undo(a); step = .plan } else { applied = a; step = .applied }
+                default: step = .found
+                }
+            }
         }
     }
 

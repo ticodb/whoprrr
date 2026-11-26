@@ -115,15 +115,20 @@ public enum StarterRecipes {
         // Audio and microphone.
         let external = scan.audio.filter { $0.transport != "builtIn" }
         for a in external {
-            let what = a.hasInput && a.hasOutput ? "headset" : a.hasInput ? "microphone" : "speakers or headphones"
-            gear.append(GearNote(id: "audio.\(a.uid)", symbol: a.hasInput && !a.hasOutput ? "mic" : "speaker.wave.2", name: a.name,
-                                 detail: "\(transportName(a.transport)) \(what)", fit: KnownGear.isTested(a.name) ? .tested : .untested))
+            let isMic = a.hasInput && (!a.hasOutput || a.name.localizedCaseInsensitiveContains("mic"))
+            let what = isMic ? "microphone" : a.hasInput ? "headset" : "speakers or headphones"
+            // A monitor's own speakers share the monitor's name; "tested" is about the display, not them.
+            let viaDisplay = a.transport == "displayPort" || a.transport == "hdmi"
+            gear.append(GearNote(id: "audio.\(a.uid)", symbol: isMic ? "mic" : "speaker.wave.2", name: a.name,
+                                 detail: "\(transportName(a.transport)) \(what)", fit: KnownGear.isTested(a.name) && !viaDisplay ? .tested : .untested))
         }
         for a in external where a.transport == "bluetooth" && a.hasOutput && !a.hasInput {
             lines.append(StarterLine(id: "audio.keepAwake.\(a.uid)", feature: .audio, detail: "Keep \(a.name) awake so it does not power off between sounds",
                                      fit: KnownGear.isTested(a.name) ? .tested : .untested, on: true, action: .keepAwake(uid: a.uid)))
         }
-        let usbMic = external.first { $0.transport == "usb" && $0.hasInput }
+        // A USB webcam also has a microphone. Prefer gear we know, then anything that calls itself a microphone.
+        func micRank(_ a: GearScan.Audio) -> Int { KnownGear.isTested(a.name) ? 2 : a.name.localizedCaseInsensitiveContains("mic") ? 1 : 0 }
+        let usbMic = external.filter { $0.transport == "usb" && $0.hasInput }.enumerated().max { (micRank($0.element), -$0.offset) < (micRank($1.element), -$1.offset) }?.element
         if let m = usbMic {
             let fit: Fit = KnownGear.isTested(m.name) ? .tested : .untested
             lines.append(StarterLine(id: "audio.pin", feature: .audio, detail: "Keep \(m.name) as the microphone in every app", fit: fit, on: true, action: .pinInput(uid: m.uid)))
