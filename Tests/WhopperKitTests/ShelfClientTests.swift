@@ -6,8 +6,10 @@ final class FakeShelf: ShelfTransport, @unchecked Sendable {
     var sent: [ShelfRequest] = []
     var answers: [(Int, String)] = []
     var offline = false
+    var cancelled = false
     func send(_ r: ShelfRequest) async throws -> ShelfResponse {
         sent.append(r)
+        if cancelled { throw URLError(.cancelled) }
         if offline { throw URLError(.notConnectedToInternet) }
         let (s, b) = answers.isEmpty ? (200, "{}") : answers.removeFirst()
         return ShelfResponse(status: s, data: Data(b.utf8))
@@ -195,6 +197,15 @@ final class ShelfClientTests: XCTestCase {
         let u = await fail(404, #"{"error":"unknown_take","message":"m"}"#, path: "api/shelf/kept")
         XCTAssertEqual(u, .unknownTake("m"))
         XCTAssertTrue(KeptRefusal.tooEarly.retryLater); XCTAssertFalse(KeptRefusal.tooLate.retryLater)
+    }
+
+    func testAnAbandonedCallIsNotReportedAsOffline() async {
+        let t = FakeShelf(); t.cancelled = true
+        let c = ShelfClient(transport: t)
+        do { _ = try await c.notices(pass: "P"); XCTFail() } catch {
+            XCTAssertTrue(error is CancellationError)
+            XCTAssertNil(error as? ShelfFailure)
+        }
     }
 
     func testNoAnswerIsOfflineAndNeverBlamesThePass() async {

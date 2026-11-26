@@ -128,6 +128,9 @@ final class PicklsssController: ObservableObject {
         } catch let e as ShelfFailure {
             guard gen == loadGeneration else { return }
             shelfFailure = e; cards = []; nextCursor = nil
+        } catch is CancellationError {
+            // The page went away mid-load (the key screen took over, say). Say nothing; the next visit loads again.
+            if gen == loadGeneration { loadGeneration += 1; loading = false }
         } catch { shelfFailure = .offline }
     }
 
@@ -326,7 +329,7 @@ final class PicklsssController: ObservableObject {
             }
             // The first accepted setup switches the extra on for the purchase; the pass learns at its next renewal, so ask for one.
             if state.hasPublicSetup, !hasExtra { await checkNow() }
-        } catch let e as ShelfFailure { mineFailure = e } catch { mineFailure = .offline }
+        } catch let e as ShelfFailure { mineFailure = e } catch is CancellationError {} catch { mineFailure = .offline }
     }
 
     var sharingClosedReason: String? { mine?.cook?.sharingClosed?.reason ?? state.sharingClosedReason }

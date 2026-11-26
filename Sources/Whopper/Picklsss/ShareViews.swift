@@ -13,12 +13,26 @@ struct ShareFlowView: View {
     var body: some View {
         ScrollView { content }
             .frame(width: 560, height: 640)
-            .task { if s.isUpdate { await s.loadPrevious() } }
+            .task {
+                // Someone who has shared before may have had sharing closed since: ask before they fill anything in.
+                if s.mode != .file, c.handle != nil { await c.refreshMine() }
+                if s.isUpdate { await s.loadPrevious() }
+            }
+    }
+
+    /// Sharing is closed for this key and this is not a file: say so at once, in place of the form.
+    private var closedBeforeStart: String? {
+        guard s.mode != .file, s.closedReason == nil, let reason = c.sharingClosedReason else { return nil }
+        return "Sharing setups is closed for this key. Reason: \(reason). Everything else in Whoprrr keeps working. Write to hello@whoprrr.app if you think this is a mistake."
     }
 
     /// The sheet's content, apart from its ScrollView so a screenshot can draw it.
     var content: some View {
             VStack(alignment: .leading, spacing: 14) {
+                if let closed = closedBeforeStart {
+                    SharingClosedCard(message: closed)
+                    HStack { Button("OK") { c.sharing = nil }.buttonStyle(.brand); Spacer() }
+                } else {
                 switch s.step {
                 case .goes: goes
                 case .describe: describe
@@ -28,6 +42,7 @@ struct ShareFlowView: View {
                         HStack { CookinLabel(detail: "The shelf is looking at it"); Spacer() }
                     }
                 case .result: result
+                }
                 }
             }
             .padding(24)
@@ -39,7 +54,6 @@ struct ShareFlowView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(s.headline).font(Brand.display(20, .semibold))
             Text(s.recipe.name).font(Brand.subheadline).foregroundStyle(.secondary)
-            if s.mode == .share, c.sharingClosedReason != nil { SharingClosedCard(message: "Sharing setups is closed for this key. Reason: \(c.sharingClosedReason ?? ""). Everything else in Whoprrr keeps working.") }
             BrandCard {
                 ForEach(Array(s.rows.enumerated()), id: \.element.id) { i, r in
                     HStack(alignment: .top, spacing: 10) {

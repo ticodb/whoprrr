@@ -227,7 +227,8 @@ public struct ShelfClient: Sendable {
 
     private func send(_ r: ShelfRequest) async throws -> Data {
         let resp: ShelfResponse
-        do { resp = try await transport.send(r) } catch { throw ShelfFailure.offline }
+        // A call abandoned because its screen went away is not "offline": nothing should be said about it.
+        do { resp = try await transport.send(r) } catch { if Task.isCancelled || (error as? URLError)?.code == .cancelled { throw CancellationError() }; throw ShelfFailure.offline }
         if (200..<300).contains(resp.status) { return resp.data }
         throw ShelfErrors.map(status: resp.status, body: resp.data, path: r.path)
     }
