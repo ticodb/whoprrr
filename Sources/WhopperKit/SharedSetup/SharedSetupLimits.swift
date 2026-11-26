@@ -144,7 +144,8 @@ private struct Checker {
     func looksPrivate(_ s: String, serials: Bool) -> String? {
         let l = s.lowercased()
         if l.contains("://") || l.contains("www.") || l.contains("mailto:") { return "a web address" }
-        if s.contains("/") || s.contains("\\") || l.contains("~") { return "a file path" }
+        if s.hasPrefix("/") || s.hasPrefix("~") || s.contains("\\")
+            || s.range(of: #"/(Users|Library|Volumes|private|var|System|Applications|tmp)/"#, options: .regularExpression) != nil { return "a file path" }
         if serials {
             if s.range(of: #"['’]s\s"#, options: .regularExpression) != nil { return "a person’s name" }
             if l.contains("serial") || l.contains("s/n") { return "a serial number" }
@@ -155,14 +156,16 @@ private struct Checker {
         return nil
     }
 
-    mutating func text(_ o: [String: JSONValue], _ key: String, _ path: String, min: Int = 1, max: Int, what: String, serials: Bool = false) -> String? {
+    /// `personal` turns on the check for addresses, paths and identifiers. It is off for the title and the description, which the
+    /// server looks at itself (an address there holds the setup for the owner instead of refusing it).
+    mutating func text(_ o: [String: JSONValue], _ key: String, _ path: String, min: Int = 1, max: Int, what: String, personal: Bool = true, serials: Bool = false) -> String? {
         guard let v = o[key] else { return nil }
         let p = join(path, key)
         guard let s = v.string else { add(p, "shape", "\(what) must be text.", tampered: true); return nil }
         let n = s.utf16.count
         if n < min || n > max { add(p, "text-length", "\(what) must be \(min == max ? "\(max)" : "\(min) to \(max)") characters (it has \(n)).") }
         if s.unicodeScalars.contains(where: { $0.value < 0x20 || $0.value == 0x7F }) { add(p, "text-length", "\(what) cannot hold line breaks or control characters.") }
-        if let why = looksPrivate(s, serials: serials) {
+        if personal, let why = looksPrivate(s, serials: serials) {
             add(p, "no-personal-text", "\(what) holds \(why). Shared setups carry model names only: no addresses, paths, serial numbers or names of people.")
         }
         return s
@@ -182,8 +185,8 @@ private struct Checker {
         guard let o = fields(doc, "", required: ["formatVersion", "title", "line", "parts", "gear", "requirements", "settings"], what: "The setup") else { return }
         if top["formatVersion"] == nil { return }
 
-        _ = text(o, "title", "", max: T.titleMax, what: "The title")
-        _ = text(o, "line", "", max: T.lineMax, what: "The description")
+        _ = text(o, "title", "", max: T.titleMax, what: "The title", personal: false)
+        _ = text(o, "line", "", max: T.lineMax, what: "The description", personal: false)
 
         let parts = names(o, "parts", "", T.parts, max: T.parts.count, what: "The list of parts") ?? []
         if let a = o["parts"]?.array, a.isEmpty { add("parts", "shape", "A setup must hold at least one part.", tampered: true) }
