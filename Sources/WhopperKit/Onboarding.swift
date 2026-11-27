@@ -193,6 +193,28 @@ public struct TasteTest {
     }
 
     @MainActor
+    /// One check never holds the Taste test longer than this. A check that doesn't answer is "could not check".
+    public static let checkDeadline: Duration = .seconds(8)
+
+    /// The probe, raced against a deadline. A probe that never returns is left behind, not awaited.
+    @MainActor
+    public func check(_ feature: Feature, mode: TasteMode, deadline: Duration = TasteTest.checkDeadline) async -> TasteFinding {
+        let gate = ProbeGate()
+        let probe = self.probe
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            gate.continuation = done
+            gate.work = Task { @MainActor in
+                let finding = await probe.tryFeature(feature, mode: mode)
+                gate.finish(finding)
+            }
+            gate.timer = Task { @MainActor in
+                try? await Task.sleep(for: deadline)
+                gate.finish(nil)
+            }
+        }
+        return gate.result ?? TasteFinding(.needsCheck, detail: "Could not check \(feature.shortTitle): it didn’t answer in time.")
+    }
+
     public func tryFeature(_ feature: Feature, grants: Set<Permission>, skipped: Set<Permission>, mode: TasteMode) async -> TasteFinding {
         let parked = grants.intersection(skipped)
         if !parked.isEmpty {
@@ -205,13 +227,13 @@ public struct TasteTest {
             if !blocked.isEmpty {
                 return TasteFinding(.notWorking, grants: blocked, detail: Self.names(blocked) + " is off for Whoprrr. Your settings are kept.")
             }
-            return await probe.tryFeature(feature, mode: mode)
+            return await check(feature, mode: mode)
         }
         let missing = Set(states.compactMap { grant, state in state == .granted || state == .unknown ? nil : grant })
         if !missing.isEmpty {
             return TasteFinding(.parked, grants: missing, detail: "Waiting for " + Self.names(missing) + ". Your settings are kept.")
         }
-        return await probe.tryFeature(feature, mode: mode)
+        return await check(feature, mode: mode)
     }
 
     /// True only when the grant certainly blocks the feature. Unknown never counts; "ask each time" (Paste) never counts;
@@ -301,5 +323,24 @@ public enum RenewalStart {
         guard windowIsKey else { return false }
         guard let shownAt else { return true }
         return now.timeIntervalSince(shownAt) >= settle
+    }
+}
+
+@MainActor
+private final class ProbeGate {
+    var continuation: CheckedContinuation<Void, Never>?
+    var work: Task<Void, Never>?
+    var timer: Task<Void, Never>?
+    var result: TasteFinding?
+    private var finished = false
+
+    func finish(_ finding: TasteFinding?) {
+        guard !finished else { return }
+        finished = true
+        result = finding
+        timer?.cancel()
+        if finding == nil { work?.cancel() }
+        continuation?.resume()
+        continuation = nil
     }
 }

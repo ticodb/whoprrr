@@ -7,7 +7,9 @@ import WhopperKit
 struct SetupPermissionChecker: PermissionChecking {
     func status(_ permission: Permission) -> PermissionStatus {
         if permission == .micDriver {
-            return CoreAudioSystem.shared.devices().contains { $0.uid == WhopperMic.uid && $0.hasInput } ? .granted : .denied
+            // The device list the audio model already keeps (read off the main thread), never a CoreAudio call here.
+            let devices = Thread.isMainThread ? MainActor.assumeIsolated { Shared.audio.devices } : CoreAudioSystem.shared.devices()
+            return devices.contains { $0.uid == WhopperMic.uid && $0.hasInput } ? .granted : .denied
         }
         return LivePermissionChecker().status(permission)
     }
@@ -26,7 +28,9 @@ struct OwnPermissionResetter: PermissionResetting {
             process.standardOutput = FileHandle.nullDevice
             process.standardError = FileHandle.nullDevice
             do { try process.run() } catch { return false }
-            process.waitUntilExit()
+            // Never wait forever: give up after 10 seconds and report that the reset didn't work.
+            for _ in 0..<200 where process.isRunning { Thread.sleep(forTimeInterval: 0.05) }
+            if process.isRunning { process.terminate(); return false }
             return process.terminationStatus == 0
         }.value
     }
@@ -103,7 +107,7 @@ final class SetupChecks: TasteProbing {
                     : TasteFinding(.needsCheck, grants: [.systemAudio], detail: "Play a chime to confirm System Audio Recording.")
             }
             let settings = Shared.audio.settings
-            let devices = CoreAudioSystem.shared.devices()
+            let devices = await Self.devices()
             let found = devices.contains { device in
                 (device.hasInput && settings.inputPin.enabled && settings.inputPin.preferredUIDs.contains(device.uid))
                     || (device.hasOutput && settings.keepAlive[device.uid]?.enabled == true)
@@ -114,14 +118,14 @@ final class SetupChecks: TasteProbing {
             return check(found, "The device selected for audio routing answered.", "The device selected for audio routing did not answer.")
         case .microphone:
             let source = Shared.audio.settings.mic.sourceUID
-            let devices = CoreAudioSystem.shared.devices()
+            let devices = await Self.devices()
             guard devices.contains(where: { $0.uid == source && $0.hasInput }) else {
                 return TasteFinding(.notWorking, detail: "The selected microphone did not answer.")
             }
             if mode == .afterUpdate { return TasteFinding(.works, detail: "The microphone grant, source and Whoprrr Mic are available.") }
             Shared.audio.beginMicTest()
             defer { Shared.audio.endMicTest() }
-            for _ in 0..<40 {
+            for _ in 0..<24 {
                 if Task.isCancelled { break }
                 if Shared.audio.latestMicSignal > 0.0003 { return TasteFinding(.works, detail: "The microphone level moved.") }
                 try? await Task.sleep(for: .milliseconds(250))
@@ -134,11 +138,13 @@ final class SetupChecks: TasteProbing {
             }
             // Taste test only: a private, uniquely named pasteboard. The general clipboard and history never see the
             // test word, so there is nothing to restore.
-            let board = NSPasteboard.withUniqueName()
-            defer { board.releaseGlobally() }
-            board.clearContents()
-            let token = "Whoprrr"
-            let read = board.setString(token, forType: .string) && board.string(forType: .string) == token
+            let read = await Task.detached {
+                let board = NSPasteboard.withUniqueName()
+                defer { board.releaseGlobally() }
+                board.clearContents()
+                let token = "Whoprrr"
+                return board.setString(token, forType: .string) && board.string(forType: .string) == token
+            }.value
             return check(read, "Whoprrr copied a word and read it back.", "Whoprrr could not read back its test word.", grants: [.paste])
         case .display:
             let model = Shared.model
@@ -180,6 +186,9 @@ final class SetupChecks: TasteProbing {
         return check(worked, "Whoprrr moved this window and put it back.",
                      "Whoprrr could not move its setup window and put it back.", grants: [.accessibility])
     }
+
+    /// CoreAudio can stall; never ask it on the main thread.
+    private static func devices() async -> [AudioDeviceInfo] { await Task.detached { CoreAudioSystem.shared.devices() }.value }
 
     private func check(_ worked: Bool, _ success: String, _ failure: String, grants: Set<Permission> = []) -> TasteFinding {
         worked ? TasteFinding(.works, detail: success) : TasteFinding(.notWorking, grants: grants, detail: failure)

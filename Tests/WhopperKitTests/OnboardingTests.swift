@@ -80,6 +80,23 @@ final class OnboardingTests: XCTestCase {
         XCTAssertNil(audit.park[.display])
     }
 
+    func testACheckThatNeverAnswersCanNotHoldTheTasteTest() async {
+        let fake = Probe()
+        fake.hang = [.display]
+        let test = runner(fake, [.accessibility: .granted])
+        let began = ContinuousClock.now
+        let display = await test.check(.display, mode: .setup, deadline: .milliseconds(150))
+        let windows = await test.tryFeature(.windows, grants: [.accessibility], skipped: [], mode: .setup)
+        XCTAssertLessThan(began.duration(to: .now), .seconds(2))
+        XCTAssertEqual(display.result, .needsCheck)
+        XCTAssertTrue(display.grants.isEmpty)
+        XCTAssertTrue(display.detail.hasPrefix("Could not check"))
+        XCTAssertFalse(TasteTest.parksAfterUpdate(display))
+        // The next check still runs.
+        XCTAssertEqual(windows.result, .works)
+        XCTAssertEqual(fake.calls.map(\.0), [.display, .windows])
+    }
+
     func testAuditAfterUpdateAllWorking() async {
         let audit = await runner(Probe(), [.accessibility: .granted]).auditAfterUpdate([.windows, .clipboard], needs: [.windows: [.accessibility]], deadline: .seconds(5))
         XCTAssertTrue(audit.finished)
