@@ -221,8 +221,14 @@ final class PicklsssController: ObservableObject {
     /// "Get Picklsss": trades this Mac's pass for a one-time link to a small page for this purchase and opens it. A pass the server
     /// refuses is dropped like a refused renewal. When no link can be made, the person is told plainly and can still go the old way:
     /// buying never depends on the new call.
-    func openBuyPage() async {
+    /// Which row of the one-time page to tick: the page reads #combo, #frrries or #picklsss.
+    enum BuyItem: String { case combo, frrries, picklsss }
+    private var lastBuyItem: BuyItem = .picklsss
+
+    /// `item` nil opens the page again for whatever was asked last.
+    func openBuyPage(_ item: BuyItem? = nil) async {
         guard !makingLink else { return }
+        if let item { lastBuyItem = item }
         makingLink = true; linkProblem = nil
         defer { makingLink = false }
         guard var pass = await license.passForShelf() else { openPersonalPage(); return }   // no pass: nothing to trade, the old page it is
@@ -234,7 +240,9 @@ final class PicklsssController: ObservableObject {
         switch outcome {
         case .ready(let url):
             awaitingPurchase = true
-            openInBrowser(url)
+            var parts = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            parts?.fragment = lastBuyItem.rawValue
+            openInBrowser(parts?.url ?? url)
         case .revoked(let message):
             license.passRejected(message)
         case .busy(let message):

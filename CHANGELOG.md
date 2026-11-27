@@ -9,6 +9,7 @@ Released 2026-11-27.
 ### Added
 - **Activate this Mac** on your order page hands Whoprrr a one-time setup code. The app can still activate with the key from your receipt.
 - **Add a TV** under Extras finds Android TVs on your network, verifies and installs Whoprrr TV, then opens it with a setup code from your order.
+- **Make it a combo** on the Extras page (was "The Combo") adds Whoprrr TV to a Mac order for $2, the difference to the Combo price. Each Add button opens your order's purchase page with just that item ticked. Before, every Add opened the same page, which only sold Frrries and Picklsss.
 - **Setup** takes this Mac from activation through a gear scan, recipe, permission guide and taste test in one window. It picks up where you left off and keeps the settings of any parked feature.
 - **After an update**, Whoprrr checks permissions quietly while your features keep running, and offers to renew only grants that clearly stopped working. The check never shows a macOS prompt or presses keys, and gives up after a few seconds. **Reset and ask again** clears a single supported grant for Whoprrr, only when you press it.
 
