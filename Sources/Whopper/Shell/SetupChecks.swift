@@ -40,9 +40,12 @@ struct OwnPermissionResetter: PermissionResetting {
 final class SetupChecks: TasteProbing {
     private var chime: Process?
     private var cuedChime: Task<Void, Never>?
+    private var verifiedAudio = false
+
+    func prepareAudioPermission() { verifiedAudio = false; Shared.audio.beginEQTest() }
 
     func startChimeTest() {
-        Shared.audio.beginEQTest()
+        prepareAudioPermission()
         cuedChime?.cancel()
         cuedChime = Task {
             try? await Task.sleep(for: .milliseconds(450))
@@ -71,7 +74,10 @@ final class SetupChecks: TasteProbing {
         Shared.audio.endEQTest()
     }
 
-    var heardChime: Bool { Shared.audio.processedPeak > 0.0003 }
+    func rememberAudioProof() { if Shared.audio.processedPeak > 0.0003 { verifiedAudio = true } }
+    // Keep this proof through Done/Continue so the subsequent Taste test doesn't depend
+    // on whether the person clicked before the live meter returned to silence.
+    var heardChime: Bool { verifiedAudio || Shared.audio.processedPeak > 0.0003 }
 
     func tryFeature(_ feature: Feature, mode: TasteMode) async -> TasteFinding {
         switch feature {

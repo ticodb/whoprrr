@@ -148,9 +148,6 @@ struct SetupView: View {
             grantRows
             HStack {
                 Button(grantAction(grant)) { setup.beginCurrentGrant(grant) }.buttonStyle(.brand)
-                if !setup.isStale(grant), setup.canReset(grant), setup.attemptedGrant == grant {
-                    Button("Reset and ask again") { setup.retry(grant, reset: true) }.buttonStyle(.brandQuiet)
-                }
                 Button("Not now") { skipGrant = grant }.buttonStyle(.brandPlain)
             }.disabled(setup.working)
         } else {
@@ -177,11 +174,8 @@ struct SetupView: View {
     }
 
     private func grantAction(_ grant: Permission) -> String {
-        if setup.isStale(grant), setup.canReset(grant) { return "Reset and grant again" }
-        if grant == .micDriver { return Shared.audio.driverInstalled ? "Check for Whoprrr Mic" : "Install Whoprrr Mic" }
-        if grant == .systemAudio { return "Play the chime" }
-        if grant == .microphone && setup.states[grant] == .notDetermined { return "Ask for microphone access" }
-        return setup.attemptedGrant == grant ? "Open the switch again" : "Open the switch for me"
+        if setup.permissionFlow?.permission == grant { return "Resume…" }
+        return setup.isStale(grant) ? "Repair…" : "Set up…"
     }
 
     @ViewBuilder private var taste: some View {
@@ -196,7 +190,7 @@ struct SetupView: View {
                         if let grant = setup.ordered(result.grants).first, result.result == .needsCheck {
                             Button("Check \(grant.title)") { setup.retry(grant, reset: false) }.buttonStyle(.brand)
                         } else if let grant = setup.ordered(result.grants).first, setup.canReset(grant) {
-                            Button("Reset and ask again") { setup.retry(grant, reset: true) }.buttonStyle(.brand)
+                            Button("Repair permission…") { setup.retry(grant, reset: true) }.buttonStyle(.brand)
                         } else {
                             Button("Try once more") { setup.runTaste(force: true) }.buttonStyle(.brandQuiet)
                             Button("Copy diagnostics") { DiagnosticsReport.copy() }.buttonStyle(.brandPlain)

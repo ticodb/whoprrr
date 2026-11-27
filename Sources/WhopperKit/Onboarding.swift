@@ -70,6 +70,7 @@ public struct SetupProgress: Codable, Sendable {
     public var skipped: Set<Permission> = []
     /// Grants being asked again, also kept across Input Monitoring's relaunch.
     public var askingAgain: Permission?
+    public var permissionFlow: PermissionFlow?
     public var grantedByTest: Set<Permission> = []
     public var resetAttempts: [Permission: Int] = [:]
     public var parked: [Feature: TasteFinding] = [:]
@@ -86,7 +87,7 @@ public struct SetupProgress: Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case step, scan, accepted, recipeName, selected, skipped, askingAgain, grantedByTest, resetAttempts
-        case parked, findings, build, updateOKUntil, updateCheckIncomplete, renewal, renewalStarted, renewedGrants
+        case permissionFlow, parked, findings, build, updateOKUntil, updateCheckIncomplete, renewal, renewalStarted, renewedGrants
     }
 
     /// Every field is optional on disk, so a file from an older or newer build keeps what it can read.
@@ -100,6 +101,7 @@ public struct SetupProgress: Codable, Sendable {
         selected = read(.selected, [])
         skipped = read(.skipped, [])
         askingAgain = read(.askingAgain, nil)
+        permissionFlow = read(.permissionFlow, nil)
         grantedByTest = read(.grantedByTest, [])
         resetAttempts = read(.resetAttempts, [:])
         parked = read(.parked, [:])

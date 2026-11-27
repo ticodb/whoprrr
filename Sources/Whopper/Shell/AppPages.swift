@@ -5,6 +5,19 @@ import WhopperKit
 enum AppPage: Hashable {
     case feature(Feature), features, permissions, recipes, about, welcome, picklsss, extras
 
+    var storageName: String {
+        switch self {
+        case .feature(let feature): return feature.rawValue
+        case .features: return "features"
+        case .permissions: return "permissions"
+        case .recipes: return "recipes"
+        case .about: return "about"
+        case .welcome: return "welcome"
+        case .picklsss: return "picklsss"
+        case .extras: return "extras"
+        }
+    }
+
     init?(name: String) {
         switch name {
         case "features": self = .features

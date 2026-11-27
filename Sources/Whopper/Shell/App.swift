@@ -55,6 +55,7 @@ enum Shared {
     }
 
     static func showWindow(page: AppPage? = nil, activate: Bool = true) {
+        if SetupController.shared.hasPermissionAssistant { SetupController.shared.showPermissionAssistant(); return }
         SetupController.shared.refreshGrants()
         SetupController.shared.reconcileSetupGrants()
         let drawer = drawerFrame()          // read before activating: activating can close the drawer
@@ -96,6 +97,35 @@ enum Shared {
         } else {
             w.orderFrontRegardless()
         }
+    }
+
+    private static var permissionGuideActive = false
+    private static var permissionReturnToDrawer = false
+
+    /// Hide the originating surface without closing it or changing its selected page.
+    static func beginPermissionGuide() -> NSRect? {
+        let previous = drawerFrame() ?? (window?.isVisible == true ? window?.frame : nil)
+        if !permissionGuideActive { permissionReturnToDrawer = drawerFrame() != nil }
+        permissionGuideActive = true
+        nav.drawerOpen = false
+        drawerWindow?.orderOut(nil)
+        window?.orderOut(nil)
+        nav.windowOpen = false
+        NSApp.setActivationPolicy(.regular)
+        return previous
+    }
+
+    static func endPermissionGuide(returnToApp: Bool) {
+        let drawer = permissionReturnToDrawer
+        permissionGuideActive = false
+        permissionReturnToDrawer = false
+        guard returnToApp else { NSApp.setActivationPolicy(.accessory); return }
+        if drawer, let drawerWindow {
+            nav.drawerOpen = true
+            NSApp.setActivationPolicy(.accessory)
+            drawerWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        } else { showWindow(page: nav.page) }
     }
 
     /// Makes every settings surface available to recipes, and switches recipes automatically when the connected gear changes.
