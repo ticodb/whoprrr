@@ -32,7 +32,9 @@ final class PresetActions: ObservableObject {
     func apply(_ entry: PresetEntry, on surface: PresetSurface) {
         guard surface.apply(entry.data) else { problem = "Could not apply that preset."; return }
         if !Shared.presets.select(entry.id, at: surface.location) { couldNotSave() }
-        Shared.saveBar.didChoosePreset(in: surface.key, copy: savePart(of: surface))
+        Shared.saveBar.didChoosePreset(in: surface.key) {
+            SaveBarSurfaces.mergePreset(surface, from: $0, into: $1, applying: entry)
+        }
     }
 
     @discardableResult

@@ -7,6 +7,7 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 ### Added
 - **Typing language per recipe.** Recipes can select an enabled keyboard input source. A manual language switch takes precedence until you reapply a recipe.
 - **Full backups.** Save all recipes, presets and per-device settings. A restore shows what it replaces and keeps a copy of the current data.
+- **Mixer** on the Audio page. Turn individual apps down or mute them. Recipes remember the apps you adjust, and shared setups and setup files leave app volumes out.
 - **Picklsss milestones** celebrate your first take, first accepted setup, first keep, and the ranks and takes that follow. Every take and share adds a pickle. See your burger grow on “My shared setups”.
 
 ### Changed

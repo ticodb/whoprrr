@@ -27,7 +27,7 @@ extension AppPage {
     static func page(forRecipePart key: String, features: FeatureStore) -> AppPage {
         let page: AppPage
         switch key {
-        case "audio", "audio.eq", "audio.outputfx", "audio.routing": page = .feature(.audio)
+        case "audio", "audio.eq", "audio.mix", "audio.outputfx", "audio.routing": page = .feature(.audio)
         case "audio.mic": page = .feature(.microphone)
         case "windows": page = .feature(.windows)
         case "clipboard": page = .feature(.clipboard)

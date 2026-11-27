@@ -26,6 +26,21 @@ final class SharedSetupExportTests: XCTestCase {
         for f in forbidden where !f.isEmpty { XCTAssertFalse(text.contains(f), "the shared setup contains “\(f)”") }
     }
 
+    func testMixStaysOutOfSharedSetupAndFileBytes() throws {
+        var recipe = Personal.recipe()
+        let before = try XCTUnwrap(SharedSetupExport.export(title: "Test", line: "Test", recipe: recipe).setup)
+        let audio = try XCTUnwrap(recipe.sections["audio"])
+        var settings = try JSONDecoder().decode(AudioSettings.self, from: audio)
+        settings.mix.set("com.personal.app-volume", volume: 0.32, muted: true, name: "Personal Music App")
+        recipe.sections["audio"] = RecipeJSON.encode(settings)
+        let after = try XCTUnwrap(SharedSetupExport.export(title: "Test", line: "Test", recipe: recipe).setup)
+
+        XCTAssertEqual(after.encoded(), before.encoded())
+        let file = try SharedSetupFile.encode(after, madeBy: "tester").get()
+        XCTAssertEqual(file, try SharedSetupFile.encode(before, madeBy: "tester").get())
+        XCTAssertTrue(SharedSetupExport.alwaysLeftOut.contains("Your app volumes. The list of apps you use is personal."))
+    }
+
     func testTheGearIsRoleAndModelOnly() throws {
         let s = try XCTUnwrap(Personal.export().setup)
         XCTAssertEqual(s.gear, [SharedGear(role: "speaker", model: "Edifier R1280"), SharedGear(role: "microphone", model: "Shure MV7"),

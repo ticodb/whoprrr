@@ -94,7 +94,6 @@ public final class SaveBarController: ObservableObject {
         if draft.recipeID != store.activeID {
             draft = SaveBarDraft(recipeID: store.activeID, baseline: store.activeBaseline)
         }
-        draft.baseline = store.canonicalSnapshot(draft.baseline)
         refresh(live)
     }
 
@@ -104,7 +103,7 @@ public final class SaveBarController: ObservableObject {
         refresh(snapshot())
     }
 
-    private func snapshot() -> [String: Data] { store.canonicalSnapshot(store.snapshot(store.surfaceKeys, sync: false)) }
+    private func snapshot() -> [String: Data] { store.snapshot(store.surfaceKeys, sync: false) }
 
     private func recipeDidChange() {
         guard !performingAction else { return }
@@ -115,7 +114,7 @@ public final class SaveBarController: ObservableObject {
         if active != draft.recipeID || next != recipeBaseline {
             dismissConfirmation()
             for (key, value) in next where draft.recipeID != active || recipeBaseline[key] != value {
-                draft.baseline[key] = store.canonicalSnapshot([key: value])[key]
+                draft.baseline[key] = value
             }
             if active == nil { draft.baseline = live }
             draft.recipeID = active
@@ -127,12 +126,14 @@ public final class SaveBarController: ObservableObject {
     private func refresh(_ live: [String: Data]) {
         // A surface that became available (for example, a connected display) gets a baseline on first read.
         draft.baseline.merge(live) { saved, _ in saved }
+        let baseline = store.canonicalSnapshot(draft.baseline)
+        let current = store.canonicalSnapshot(live)
         let changed = sections.filter { section in
-            guard let before = draft.baseline[section.recipePart].flatMap(section.fingerprint),
-                  let after = live[section.recipePart].flatMap(section.fingerprint) else { return false }
+            guard let before = baseline[section.recipePart].flatMap(section.fingerprint),
+                  let after = current[section.recipePart].flatMap(section.fingerprint) else { return false }
             return before != after
         }.map(\.id)
-        if confirmation != nil, live != lastLive { dismissConfirmation() }
+        if confirmation != nil, current != store.canonicalSnapshot(lastLive) { dismissConfirmation() }
         lastLive = live
         if changed != changedSections {
             changedSections = changed

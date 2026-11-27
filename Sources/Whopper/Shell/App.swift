@@ -214,7 +214,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         guard !backupRecoveryFailed else { return }
         Shared.saveBar.noteLeaving()
-        Shared.input.shutdown()
+        // A no-start screenshot run owns no system input settings to restore.
+        if ProcessInfo.processInfo.environment["WHOPPER_NO_START"] != "1" { Shared.input.shutdown() }
     }
 
     /// Document files opened from Finder or dropped on the app are checked before presenting any actions.

@@ -66,7 +66,9 @@ struct SaveBarArea: View {
     @State private var creating = false
 
     private var surfaces: [PresetSurface] {
-        bar.changedSections.compactMap { PresetSurfaces.surface($0) }
+        var keys = Set<String>()
+        return bar.changedSections.compactMap { PresetSurfaces.surface($0) }
+            .filter { keys.insert($0.key).inserted }
     }
 
     var body: some View {
