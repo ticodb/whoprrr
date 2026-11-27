@@ -1,14 +1,15 @@
 # Changelog
 
+All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://semver.org); betas are labelled `0.9.0 beta N`.
+
 ## Unreleased
 
 ### Added
 - **One menu for presets** in Audio, Microphone, Windows, Keys and mouse, and Clipboard. It shows which preset is in use and whether you edited it. Update with one click or ⌘U. When the active recipe uses those settings, the same action saves the recipe and offers one Undo for both. Manage presets to rename them, or to hide or restore built-ins.
+- **Picklsss milestones** celebrate your first take, first accepted setup, first keep, and the ranks and takes that follow. Every take and share adds a pickle. See your burger grow on “My shared setups”.
 
 ### Changed
 - **Quieter recipe saves**: the page title shows “Cookin’” and the recipe name while you make changes. Open it to save, make a new recipe, or put things back. Press ⌘S anywhere in the main window to save. A reminder appears when you leave a page, and “Not yet” keeps it away until the next change. The saved message offers Undo for four seconds and stays while you hover over it. The recipe menu still keeps the previous saved version.
-
-All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://semver.org); betas are labelled `0.9.0 beta N`.
 
 ## 0.9.0 beta 8: make it a combo from the app
 
@@ -61,7 +62,6 @@ Released 2026-11-27.
 - **Picklsss, the shelf of setups other people shared**: a page with tabs For your gear, Popular and New, and search. Browsing needs no extra and sends nothing about your gear (ranking is done on your Mac). Open one to see every line with a fit label judged against *your* gear, match their devices to yours, review a before and after, and apply with "Cookin'". The result is an ordinary recipe, with two ways back in its menu (before your last save; the author's original as fitted) and one button that puts everything back. Take one part on its own into your presets. Plugins are never downloaded or installed; a missing one is a link you may click.
 - **The extra**: taking needs the shared-setups extra ($4, paid once, free if a setup you share is accepted). Everything up to and including the review is free; the lock appears at the first action that changes your Mac. Paying happens in the browser; Whoprrr re-checks its pass when it comes to the front and on "Check now", then carries on where you were.
 - **Share as a picklsss…**, **Send as a file…** and **Share the update** in a recipe's menu: what goes, what is always left out, a switch per part, limits checked per line before anything is sent. "My shared setups" shows each one's state; updates are a separate step with a note; taking down asks first.
-- **Picklsss milestones** celebrate your first take, first accepted setup, first keep, and the ranks and takes that follow. Every take and share adds a pickle. See your burger grow on “My shared setups”.
 - **Count what you keep** (opt-in, asked once, changeable on the Extras page): 7 days after a take, one yes or no is sent, worked out on your Mac. **Kitchen time**, for people who share only, is counted once a day. The once-a-day shelf round (notices, the day-7 answer, kitchen time) usually runs with the update check, and keeps running for people who use shared setups when automatic update checks are off.
 - **Notices**: an update is offered with the author's note and a before and after (a plain choice between yours and the new one); a setup removed because its author can no longer share is announced with "Put back".
 - **Did it work? / Something is off** after taking, reusing the gear scan's report.
