@@ -41,6 +41,7 @@ public enum SharedSetupExport {
         "Clipboard history and snippets",
         "Any text a key rule would type",
         "The list of apps the clipboard ignores",
+        "Your app volumes. The list of apps you use is personal.",
         "Serial numbers",
         "Display IDs, audio device IDs and any other identifier of your devices",
         "The names you gave your devices (only the model name is kept)",

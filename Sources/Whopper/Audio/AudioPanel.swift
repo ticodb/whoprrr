@@ -8,6 +8,7 @@ struct AudioPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             PanelHeader("Audio", symbol: "slider.vertical.3", subtitle: "Equalizer, effects, routing")
+            MixerSection()
             eqSection
             if m.settings.eq.enabled {
                 Divider()
@@ -27,10 +28,10 @@ struct AudioPanel: View {
     private var eqSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                SectionLabel("System sound")
+                SectionLabel("Equalizer")
                 Spacer()
                 PresetMenu(surface: PresetSurfaces.eq(m))
-                Toggle("", isOn: Binding(get: { m.settings.eq.enabled }, set: { m.settings.eq.enabled = $0 })).toggleStyle(.switch).labelsHidden().controlSize(.regular)
+                Toggle("Equalizer", isOn: Binding(get: { m.settings.eq.enabled }, set: { m.settings.eq.enabled = $0 })).toggleStyle(.switch).labelsHidden().controlSize(.regular)
             }
             eqStatus
             if m.settings.eq.enabled || m.eqProfile != .flat {

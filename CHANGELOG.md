@@ -5,6 +5,7 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 ## Unreleased
 
 ### Added
+- **Mixer** on the Audio page. Turn individual apps down or mute them. Recipes remember the apps you adjust, and shared setups and setup files leave app volumes out.
 - **Quieter recipe saves**: the page title shows “Cookin’” and the recipe name while you make changes. Open it to save, make a new recipe, or put things back. Press ⌘S anywhere in the main window to save. A reminder appears when you leave a page, and “Not yet” keeps it away until the next change. The saved message offers Undo for four seconds and stays while you hover over it. The recipe menu still keeps the previous saved version.
 - **Unsaved changes are never dropped**: closing the window asks nothing and the change stays live, also after a quit. The next time the window opens it lands on the page that changed with a reminder, until you save or put back. When gear changes would switch recipes automatically and the current one has unsaved changes, Whoprrr asks first (save then switch, switch without saving, or stay).
 - **One menu for presets** in Audio, Microphone, Windows, Keys and mouse, and Clipboard. It shows which preset is in use and whether you edited it. Update with one click or ⌘U. When the active recipe uses those settings, the same action saves the recipe and offers one Undo for both. Manage presets to rename them, or to hide or restore built-ins.

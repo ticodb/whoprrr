@@ -175,7 +175,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var debugWindow: NSWindow?
     func applicationWillTerminate(_ notification: Notification) {
         Shared.recipes.noteLeaving()          // unsaved changes are still there next time, with the reminder
-        Shared.input.shutdown()
+        // A no-start screenshot run owns no system input settings to restore.
+        if ProcessInfo.processInfo.environment["WHOPPER_NO_START"] != "1" { Shared.input.shutdown() }
     }
 
     /// A `.whoprrr-setup` file opened from Finder or dropped on the app. The checker runs every time; opening is free to look at.

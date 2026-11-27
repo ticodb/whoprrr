@@ -6,7 +6,7 @@ import WhopperKit
 @MainActor
 final class AudioModel: ObservableObject {
     private let system: CoreAudioSystem
-    private let store = JSONStore<AudioSettings>(name: "audio")
+    private let store: JSONStore<AudioSettings>
     private let pinner: InputPinner
     private let keepAlive: KeepAliveEngine
     let eqEngine: OutputEQEngine
@@ -14,13 +14,15 @@ final class AudioModel: ObservableObject {
     private var cancelObserve: (@Sendable () -> Void)?
     private(set) var active = false
 
-    @Published var settings: AudioSettings { didSet { if settings != oldValue { settingsChanged() } } }
+    @Published var settings: AudioSettings { didSet { if settings != oldValue { settingsChanged(from: oldValue) } } }
     @Published private(set) var devices: [AudioDeviceInfo] = []
     @Published private(set) var defaultInputUID: String?
     @Published private(set) var pinStatus: InputPinner.Status?
     @Published private(set) var keepAliveStatus: [String: KeepAliveEngine.DeviceStatus] = [:]
     @Published private(set) var eqState: OutputEQEngine.State = .off
     @Published private(set) var eqLevel: Float = 0
+    @Published private(set) var mixApps: [MixApp] = []
+    @Published private(set) var mixFailures: Set<String> = []
     @Published private(set) var defaultOutputUID: String?
     @Published private(set) var micState: MicEngine.State = .off
     @Published private(set) var micLevels: (input: Float, output: Float) = (0, 0)
@@ -29,8 +31,9 @@ final class AudioModel: ObservableObject {
     /// Load state of every effect plugin on the mic and the system output, by slot id.
     @Published private(set) var pluginStatus: [UUID: PluginStatus] = [:]
 
-    init(system: CoreAudioSystem = .shared) {
+    init(system: CoreAudioSystem = .shared, store: JSONStore<AudioSettings> = JSONStore(name: "audio")) {
         self.system = system
+        self.store = store
         pinner = InputPinner(system: system)
         keepAlive = KeepAliveEngine(system: system)
         eqEngine = OutputEQEngine(system: system)
@@ -39,6 +42,8 @@ final class AudioModel: ObservableObject {
         micEngine.onState = { [weak self] st in Task { @MainActor in self?.micState = st; self?.updatePin() } }
         micEngine.onLevels = { [weak self] i, o in Task { @MainActor in self?.micLevels = (i, o) } }
         eqEngine.onState = { [weak self] st in Task { @MainActor in self?.eqState = st } }
+        eqEngine.onMixApps = { [weak self] apps in Task { @MainActor in self?.updateMixApps(apps) } }
+        eqEngine.onMixFailures = { [weak self] ids in Task { @MainActor in self?.mixFailures = ids } }
         eqEngine.onLevel = { [weak self] l in Task { @MainActor in self?.eqLevel = l } }
         eqEngine.onPermissionVerified = { [weak self] in Task { @MainActor in self?.settings.eq.permissionVerified = true } }
         micEngine.rack.onStatus = { [weak self] st in Task { @MainActor in self?.mergePluginStatus(st) } }
@@ -68,7 +73,7 @@ final class AudioModel: ObservableObject {
         } else {
             cancelObserve?(); cancelObserve = nil
             pinner.stop(); keepAlive.stop(); eqEngine.stop(); micEngine.stop()
-            pinStatus = nil; keepAliveStatus = [:]
+            pinStatus = nil; keepAliveStatus = [:]; mixApps = []; mixFailures = []
         }
     }
 
@@ -85,15 +90,22 @@ final class AudioModel: ObservableObject {
         }
     }
 
-    private func settingsChanged() {
+    private func settingsChanged(from oldValue: AudioSettings) {
         store.save(settings)
-        if active { applySettings() }
+        guard active else { return }
+        var previous = oldValue
+        previous.mix = settings.mix
+        if previous == settings {
+            if !settings.mix.matchesLevels(of: oldValue.mix) { eqEngine.apply(settings.eq, mix: settings.mix) }
+        } else {
+            applySettings()
+        }
     }
 
     private func applySettings() {
         updatePin()
         keepAlive.apply(settings.keepAlive)
-        eqEngine.apply(settings.eq)
+        eqEngine.apply(settings.eq, mix: settings.mix)
         micEngine.apply(settings.mic)
     }
 
@@ -144,6 +156,35 @@ final class AudioModel: ObservableObject {
         guard let uid = eqDeviceUID else { return }
         if on { settings.eq.profiles[uid] = settings.eq.defaultProfile } else { settings.eq.profiles[uid] = nil }
     }
+
+    // MARK: Mixer
+
+    private func updateMixApps(_ apps: [MixApp]) {
+        guard active else { return }
+        if mixApps != apps { mixApps = apps }
+        let mix = withLiveMixNames(settings.mix)
+        if mix != settings.mix { settings.mix = mix }
+    }
+
+    func withLiveMixNames(_ mix: MixSettings) -> MixSettings {
+        var result = mix
+        for app in mixApps {
+            if let saved = mix.apps[app.id], saved.name != app.name {
+                result.set(app.id, volume: saved.volume, muted: saved.muted, name: app.name)
+            }
+        }
+        return result
+    }
+
+    #if DEBUG
+    func showDebugMixer(apps: [MixApp], equalizerOn: Bool, failures: Set<String>) {
+        guard !active else { return }
+        mixApps = apps
+        mixFailures = failures
+        settings.eq.enabled = equalizerOn
+        eqState = equalizerOn ? .running(device: "Xiaomi SO", muted: true) : .off
+    }
+    #endif
 
     // MARK: Intent helpers for the view
 
