@@ -40,6 +40,15 @@ public struct TasteFinding: Codable, Equatable, Sendable {
         self.grants = grants
         self.detail = detail
     }
+
+    private enum CodingKeys: String, CodingKey { case result, grants, detail }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        result = (try? c.decodeIfPresent(TasteResult.self, forKey: .result)) ?? .needsCheck
+        grants = (try? c.decodeIfPresent(Set<Permission>.self, forKey: .grants)) ?? []
+        detail = (try? c.decodeIfPresent(String.self, forKey: .detail)) ?? ""
+    }
 }
 
 @MainActor
@@ -67,11 +76,65 @@ public struct SetupProgress: Codable, Sendable {
     public var findings: [Feature: TasteFinding] = [:]
     public var build: String?
     public var updateOKUntil: Date?
+    /// The check after an update ran out of time. Features started as before.
+    public var updateCheckIncomplete = false
     public var renewal: Set<Feature> = []
     public var renewalStarted = false
     public var renewedGrants: Set<Permission> = []
 
     public init(step: SetupStep = .gear) { self.step = step }
+
+    private enum CodingKeys: String, CodingKey {
+        case step, scan, accepted, recipeName, selected, skipped, askingAgain, grantedByTest, resetAttempts
+        case parked, findings, build, updateOKUntil, updateCheckIncomplete, renewal, renewalStarted, renewedGrants
+    }
+
+    /// Every field is optional on disk, so a file from an older or newer build keeps what it can read.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func read<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T { ((try? c.decodeIfPresent(T.self, forKey: key)) ?? nil) ?? fallback }
+        step = read(.step, .complete)
+        scan = read(.scan, nil)
+        accepted = read(.accepted, [])
+        recipeName = read(.recipeName, nil)
+        selected = read(.selected, [])
+        skipped = read(.skipped, [])
+        askingAgain = read(.askingAgain, nil)
+        grantedByTest = read(.grantedByTest, [])
+        resetAttempts = read(.resetAttempts, [:])
+        parked = read(.parked, [:])
+        findings = read(.findings, [:])
+        build = read(.build, nil)
+        updateOKUntil = read(.updateOKUntil, nil)
+        updateCheckIncomplete = read(.updateCheckIncomplete, false)
+        renewal = read(.renewal, [])
+        renewalStarted = read(.renewalStarted, false)
+        renewedGrants = read(.renewedGrants, [])
+    }
+
+    /// Features that may run. Parked features keep their settings but stay off. The check after an update never holds
+    /// working features back: they run while it reads, and it parks only what definitely stopped working.
+    public func allowed(_ enabled: Set<Feature>) -> Set<Feature> {
+        guard step == .complete || step == .orderUp else { return [] }
+        return enabled.subtracting(parked.keys)
+    }
+
+    /// A grant that reads as on but whose feature failed its test, and has not been renewed in this pass.
+    public func isStale(_ grant: Permission, targets: Set<Feature>) -> Bool {
+        step == .complete && !renewedGrants.contains(grant)
+            && targets.contains { parked[$0]?.result == .notWorking && parked[$0]?.grants.contains(grant) == true }
+    }
+
+    /// The next grant to ask for: one being asked again, else the first in order that is off (or stale) and whose
+    /// features are not waiting on a skipped grant.
+    public func currentGrant(order: [Permission], requirements: [Feature: Set<Permission>], targets: Set<Feature>,
+                             isGranted: (Permission) -> Bool) -> Permission? {
+        if let retry = askingAgain, !skipped.contains(retry) { return retry }
+        return order.first { permission in
+            guard !skipped.contains(permission), !isGranted(permission) || isStale(permission, targets: targets) else { return false }
+            return requirements.values.contains { $0.contains(permission) && $0.isDisjoint(with: skipped) }
+        }
+    }
 
     public mutating func reserveReset(_ permission: Permission) -> Bool {
         let used = resetAttempts[permission, default: 0]
@@ -111,27 +174,101 @@ public struct TasteTest {
     }
 
     @MainActor
-    public func tryFeature(_ feature: Feature, grants: Set<Permission>, skipped: Set<Permission>,
-                           proven: Set<Permission>, mode: TasteMode) async -> TasteFinding {
+    public func tryFeature(_ feature: Feature, grants: Set<Permission>, skipped: Set<Permission>, mode: TasteMode) async -> TasteFinding {
         let parked = grants.intersection(skipped)
         if !parked.isEmpty {
             return TasteFinding(.parked, grants: parked, detail: "Waiting for " + Self.names(parked) + ". Your settings are kept.")
         }
         let states = grants.map { ($0, checker.status($0)) }
+        if mode == .afterUpdate {
+            // Park only on a definite failure. A grant macOS can't report, or one that still asks each time, is not one.
+            let blocked = Set(states.compactMap { Self.definitelyBlocked($0, $1) ? $0 : nil })
+            if !blocked.isEmpty {
+                return TasteFinding(.notWorking, grants: blocked, detail: Self.names(blocked) + " is off for Whoprrr. Your settings are kept.")
+            }
+            return await probe.tryFeature(feature, mode: mode)
+        }
         let missing = Set(states.compactMap { grant, state in state == .granted || state == .unknown ? nil : grant })
-        let unverified = Set(states.compactMap { grant, state in state == .unknown && !proven.contains(grant) ? grant : nil })
         if !missing.isEmpty {
             return TasteFinding(.parked, grants: missing, detail: "Waiting for " + Self.names(missing) + ". Your settings are kept.")
         }
-        if mode == .afterUpdate && !unverified.isEmpty {
-            return TasteFinding(.needsCheck, grants: unverified, detail: "Run a check to confirm " + Self.names(unverified) + ".")
-        }
         return await probe.tryFeature(feature, mode: mode)
+    }
+
+    /// True only when the grant certainly blocks the feature. Unknown never counts; "ask each time" (Paste) never counts;
+    /// the Whoprrr Mic driver is a device, not a grant, so a missing device never parks after an update.
+    public static func definitelyBlocked(_ grant: Permission, _ status: PermissionStatus) -> Bool {
+        switch status {
+        case .denied: grant != .micDriver
+        case .notDetermined: grant == .accessibility || grant == .inputMonitoring
+        case .granted, .unknown: false
+        }
+    }
+
+    /// A finding from the after-update check parks its feature only when it names a grant and the feature failed.
+    public static func parksAfterUpdate(_ finding: TasteFinding) -> Bool {
+        (finding.result == .notWorking || finding.result == .parked) && !finding.grants.isEmpty
+    }
+
+    /// The silent check after an update. Reads states and runs probes that cannot prompt or post input, one feature at a
+    /// time, and gives up at the deadline: features it did not reach are reported, never parked.
+    @MainActor
+    public func auditAfterUpdate(_ features: [Feature], needs: [Feature: Set<Permission>], deadline: Duration) async -> UpdateAudit {
+        let gate = AuditGate()
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            gate.continuation = done
+            gate.work = Task { @MainActor in
+                for feature in features {
+                    let finding = await tryFeature(feature, grants: needs[feature] ?? [], skipped: [], mode: .afterUpdate)
+                    guard !gate.finished else { return }
+                    gate.findings[feature] = finding
+                }
+                gate.completed = true
+                gate.finish()
+            }
+            gate.timer = Task { @MainActor in
+                try? await Task.sleep(for: deadline)
+                gate.finish()
+            }
+        }
+        var findings = gate.findings
+        for feature in features where findings[feature] == nil {
+            findings[feature] = TasteFinding(.needsCheck, detail: "The check after the update could not finish. \(feature.shortTitle) started as before.")
+        }
+        let park = findings.filter { Self.parksAfterUpdate($0.value) }
+        return UpdateAudit(findings: findings, park: park, finished: gate.completed)
     }
 
     public func reset(_ permission: Permission) async -> Bool { await resetter.reset(permission) }
 
     public static func names(_ grants: Set<Permission>) -> String {
         Permission.setupOrder.filter(grants.contains).map(\.title).joined(separator: ", ")
+    }
+}
+
+public struct UpdateAudit: Equatable, Sendable {
+    public var findings: [Feature: TasteFinding]
+    public var park: [Feature: TasteFinding]
+    public var finished: Bool
+
+    public var allWork: Bool { finished && findings.values.allSatisfy { $0.result == .works } }
+}
+
+@MainActor
+private final class AuditGate {
+    var continuation: CheckedContinuation<Void, Never>?
+    var work: Task<Void, Never>?
+    var timer: Task<Void, Never>?
+    var findings: [Feature: TasteFinding] = [:]
+    var completed = false
+    var finished = false
+
+    func finish() {
+        guard !finished else { return }
+        finished = true
+        timer?.cancel()
+        work?.cancel()
+        continuation?.resume()
+        continuation = nil
     }
 }

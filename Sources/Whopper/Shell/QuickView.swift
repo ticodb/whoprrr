@@ -26,7 +26,10 @@ struct QuickView: View {
             if setup.progress.step != .complete || !setup.parkedFeatures.isEmpty { setupReminder }
             else if !missing.isEmpty { permissionBanner }
             if setup.updateOK { Text("Updated to \(AppInfo.version). Everything was checked and still works.").font(Brand.caption).foregroundStyle(.secondary) }
-            let runtime = SetupController.allowed(features.enabled, progress: setup.progress, auditing: setup.auditing)
+            else if setup.updateCheckIncomplete {
+                Text("Updated to \(AppInfo.version). The check could not finish; features started as before.").font(Brand.caption).foregroundStyle(.secondary)
+            }
+            let runtime = SetupController.allowed(features.enabled, progress: setup.progress)
             if runtime.contains(.remap) { keysRow }
             if runtime.contains(.clipboard) { clipboardRow }
             if runtime.contains(.windows) { windowsRow }
@@ -230,12 +233,10 @@ struct QuickView: View {
     }
 
     private func refreshPermissions() {
-        // Camera and Microphone ask by themselves the first time they are used, so "not asked yet" is not a problem.
+        // Camera and Microphone ask by themselves the first time they are used, and Paste can ask each time,
+        // so "not asked yet" is a problem only for grants that never ask on their own.
         let grants = Set(setup.requirements(for: features.enabled).values.flatMap { $0 })
-        missing = grants.sorted { $0.title < $1.title }.filter { p in
-            let s = checker.status(p)
-            return s == .denied || (s == .notDetermined && p != .camera && p != .microphone)
-        }
+        missing = grants.sorted { $0.title < $1.title }.filter { TasteTest.definitelyBlocked($0, checker.status($0)) }
     }
 }
 

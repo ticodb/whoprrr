@@ -71,18 +71,10 @@ final class SetupController: ObservableObject {
     }
 
     var currentGrant: Permission? {
-        if let retry = progress.askingAgain, !progress.skipped.contains(retry) { return retry }
-        let choices = requirements(for: activeTargets)
-        return grants.first { permission in
-            guard !progress.skipped.contains(permission), !isGranted(permission) || isStale(permission) else { return false }
-            return choices.values.contains { $0.contains(permission) && $0.isDisjoint(with: progress.skipped) }
-        }
+        progress.currentGrant(order: grants, requirements: requirements(for: activeTargets), targets: activeTargets, isGranted: isGranted)
     }
 
-    private func isStale(_ grant: Permission) -> Bool {
-        progress.step == .complete && !progress.renewedGrants.contains(grant)
-            && activeTargets.contains { progress.parked[$0]?.result == .notWorking && progress.parked[$0]?.grants.contains(grant) == true }
-    }
+    func isStale(_ grant: Permission) -> Bool { progress.isStale(grant, targets: activeTargets) }
 
     func isGranted(_ grant: Permission) -> Bool {
         if grant == .inputMonitoring && inputRestartRequested { return false }
@@ -95,11 +87,9 @@ final class SetupController: ObservableObject {
     }
     var parkedGrants: Set<Permission> { Set(parkedFeatures.flatMap { progress.parked[$0]?.grants ?? [] }) }
     var updateOK: Bool { progress.updateOKUntil.map { $0 > Date() } ?? false }
+    var updateCheckIncomplete: Bool { progress.updateCheckIncomplete && progress.build == AppInfo.build }
 
-    static func allowed(_ enabled: Set<Feature>, progress: SetupProgress, auditing: Bool) -> Set<Feature> {
-        guard !auditing, progress.step == .complete || progress.step == .orderUp else { return [] }
-        return enabled.subtracting(progress.parked.keys)
-    }
+    static func allowed(_ enabled: Set<Feature>, progress: SetupProgress) -> Set<Feature> { progress.allowed(enabled) }
 
     func beginLicensedLaunch() {
         guard !beganLicensedLaunch else { return }
@@ -137,6 +127,18 @@ final class SetupController: ObservableObject {
         let previous = states
         let next = taste.readGrants()
         if previous != next { states = next }
+        afterGrantRead()
+    }
+
+    /// Reads only the one grant the guide card is waiting for.
+    private func refreshGrant(_ grant: Permission) {
+        guard LicenseController.shared.isLicensed else { return }
+        let next = taste.checker.status(grant)
+        if states[grant] != next { states[grant] = next }
+        afterGrantRead()
+    }
+
+    private func afterGrantRead() {
         if !inputRestartRequested, progress.askingAgain == .inputMonitoring, states[.inputMonitoring] == .granted, attemptedGrant == nil {
             progress.askingAgain = nil
             progress.renewedGrants.insert(.inputMonitoring)
@@ -206,9 +208,9 @@ final class SetupController: ObservableObject {
         if !auditing { run?.cancel() }
     }
 
+    /// "Open the switch for me" never resets. Clearing a stale grant is only the explicit "Reset and ask again" button.
     func beginCurrentGrant(_ grant: Permission) {
-        if isGranted(grant), isStale(grant), canReset(grant) { retry(grant, reset: true) }
-        else { startGrant(grant, requireToggle: isGranted(grant) && isStale(grant)) }
+        startGrant(grant, requireToggle: isGranted(grant) && isStale(grant))
     }
 
     private func startGrant(_ grant: Permission, requireToggle: Bool = false) {
@@ -253,7 +255,7 @@ final class SetupController: ObservableObject {
     func playChime() { checks.playChime() }
 
     func pollGrant(_ grant: Permission) -> Bool {
-        refreshGrants()
+        refreshGrant(grant)
         if waitingForSwitchOff == grant {
             guard states[grant] != .granted else { return false }
             waitingForSwitchOff = nil
@@ -305,8 +307,7 @@ final class SetupController: ObservableObject {
                 if Task.isCancelled { break }
                 if !force, progress.findings[feature]?.result == .works, progress.parked[feature] == nil { continue }
                 trying = feature
-                let result = await taste.tryFeature(feature, grants: needs[feature] ?? [], skipped: progress.skipped,
-                                                    proven: progress.grantedByTest, mode: .setup)
+                let result = await taste.tryFeature(feature, grants: needs[feature] ?? [], skipped: progress.skipped, mode: .setup)
                 guard !Task.isCancelled else { break }
                 progress.findings[feature] = result
                 if result.result == .works { progress.parked[feature] = nil }
@@ -405,21 +406,17 @@ final class SetupController: ObservableObject {
         if !Shared.clipboard.settings.enabled { features.remove(.clipboard) }
         if !Shared.audio.settings.mic.enabled { features.remove(.microphone) }
         let needs = requirements(for: features)
-        var findings: [Feature: TasteFinding] = [:]
-        var newlyParked: [Feature: TasteFinding] = [:]
-        for feature in Feature.allCases where features.contains(feature) && progress.parked[feature] == nil {
-            let finding = await taste.tryFeature(feature, grants: needs[feature] ?? [], skipped: [], proven: [], mode: .afterUpdate)
-            findings[feature] = finding
-            if finding.result != .works && !finding.grants.isEmpty { newlyParked[feature] = finding }
-        }
+        let targets = Feature.allCases.filter { features.contains($0) && progress.parked[$0] == nil }
+        // Features already run during the check; the deadline only bounds how long the result can take.
+        let audit = await taste.auditAfterUpdate(targets, needs: needs, deadline: .seconds(6))
         var next = progress
-        next.findings.merge(findings) { _, current in current }
-        next.parked.merge(newlyParked) { _, current in current }
+        next.findings.merge(audit.findings) { _, current in current }
+        next.parked.merge(audit.park) { _, current in current }
         next.build = AppInfo.build
-        next.updateOKUntil = findings.values.allSatisfy { $0.result == .works } && next.parked.isEmpty
-            ? Date().addingTimeInterval(86_400) : nil
-        if !newlyParked.isEmpty {
-            next.renewal.formUnion(newlyParked.keys)
+        next.updateCheckIncomplete = !audit.finished
+        next.updateOKUntil = audit.allWork && next.parked.isEmpty ? Date().addingTimeInterval(86_400) : nil
+        if !audit.park.isEmpty {
+            next.renewal.formUnion(audit.park.keys)
             next.renewalStarted = false
             next.askingAgain = nil
             next.skipped = []
@@ -429,7 +426,7 @@ final class SetupController: ObservableObject {
         next.resetAttempts = [:]
         progress = next
         auditing = false
-        if !newlyParked.isEmpty {
+        if !audit.park.isEmpty {
             renewalVisible = true
             openWindow()
         }
