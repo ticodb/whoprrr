@@ -27,13 +27,15 @@ final class GrantGuide: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         window.delegate = self
-        window.contentView = NSHostingView(rootView: GrantGuideView(setup: setup))
+        window.contentView = NSHostingView(rootView: GrantGuideView(setup: setup, resize: { [weak self] in
+            DispatchQueue.main.async { self?.resize() }
+        }))
         self.window = window
         resize()
         if let frame = previousFrame {
             window.setFrameTopLeftPoint(NSPoint(x: frame.midX - window.frame.width / 2, y: frame.midY + window.frame.height / 2))
         } else { window.center() }
-        changes = setup.$progress.sink { [weak self] _ in
+        changes = setup.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async { self?.resize() }
         }
         window.makeKeyAndOrderFront(nil)
@@ -88,6 +90,7 @@ final class GrantGuide: NSObject, NSWindowDelegate {
 
 private struct GrantGuideView: View {
     @ObservedObject var setup: SetupController
+    var resize: () -> Void
 
     var body: some View {
         if let flow = setup.permissionFlow {
@@ -98,7 +101,7 @@ private struct GrantGuideView: View {
                 showFinder: { NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL]) },
                 playChime: setup.runAssistantAudioCheck, finish: setup.finishPermissionAssistant,
                 later: { setup.suspendPermissionAssistant() },
-                repair: { setup.retry(flow.permission, reset: true) }, restart: setup.restartForPermission)
+                repair: { setup.retry(flow.permission, reset: true) }, restart: setup.restartForPermission, sizeDidChange: resize)
         }
     }
 }
@@ -120,6 +123,7 @@ struct PermissionAssistantCard: View {
     var later: () -> Void = {}
     var repair: () -> Void = {}
     var restart: () -> Void = {}
+    var sizeDidChange: () -> Void = {}
     @State private var help = false
 
     private var grant: Permission { flow.permission }
@@ -153,6 +157,7 @@ struct PermissionAssistantCard: View {
         .frame(width: 400).fixedSize(horizontal: false, vertical: true)
         .background(Color(nsColor: .windowBackgroundColor))
         .tint(Brand.violetBright)
+        .onChange(of: help) { _ in sizeDidChange() }
     }
 
     @ViewBuilder private var content: some View {

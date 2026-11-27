@@ -382,7 +382,7 @@ final class SetupController: ObservableObject {
         // path is a positional argument, never shell source; no permission request is replayed.
         let reopen = Process()
         reopen.executableURL = URL(fileURLWithPath: "/bin/sh")
-        reopen.arguments = ["-c", "sleep 1; /usr/bin/open \"$1\"", "whoprrr-reopen", Bundle.main.bundleURL.path]
+        reopen.arguments = ["-c", "while /bin/kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; exec /usr/bin/open \"$2\"", "whoprrr-reopen", String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundleURL.path]
         do { try reopen.run(); NSApp.terminate(nil) }
         catch { note = "Quit and reopen Whoprrr to finish applying this permission." }
     }
