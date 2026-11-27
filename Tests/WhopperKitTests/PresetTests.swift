@@ -43,6 +43,28 @@ final class PresetTests: RecipeHarnessCase {
         XCTAssertTrue(groups(reopened).selectableYours.isEmpty)
     }
 
+    func testUnreadableCatalogIsCopiedAndNeverOverwrittenByPresetSaves() throws {
+        let dir = tmpDir()
+        let url = dir.appendingPathComponent("presets.json")
+        let original = Data(#"{"catalog":{"yours":{"audio.eq":"future data"}}}"#.utf8)
+        try original.write(to: url)
+
+        for _ in 0..<2 {
+            let presets = PresetLibrary(url: url)
+            XCTAssertTrue(presets.preservesUnreadableFile)
+            XCTAssertFalse(presets.saveNew("Desk", data: Data([1]), at: location))
+            XCTAssertNil(presets.save("Taken preset", data: Data([2]), for: control))
+            XCTAssertEqual(try Data(contentsOf: url), original)
+        }
+
+        let copies = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasPrefix("presets.json.unreadable-") }
+        XCTAssertEqual(copies.count, 2)
+        for copy in copies {
+            XCTAssertEqual(try Data(contentsOf: copy), original)
+        }
+    }
+
     func testCanonicalMatchDoesNotMarkEquivalentJSONAsEdited() {
         let presets = library()
         XCTAssertTrue(presets.saveNew("Desk", data: Data("{\"b\":2,\"a\":1}".utf8), at: location))

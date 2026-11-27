@@ -307,7 +307,7 @@ final class TakeSession: ObservableObject, Identifiable {
                 if tryNow, let p = Shared.model.presetsForSelected().first(where: { $0.name == saved }) { Shared.model.apply(p) }
                 continue
             }
-            let saved = Shared.presets.save(name, data: tp.data, for: tp.key)
+            guard let saved = Shared.presets.save(name, data: tp.data, for: tp.key) else { continue }
             landed.append("\(tp.title): “\(name)”")
             if tryNow, let surface = PresetSurfaces.surface(tp.key), surface.apply(tp.data) {
                 Shared.presets.select(.personal(saved.id), at: surface.location)

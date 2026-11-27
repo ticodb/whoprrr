@@ -21,7 +21,8 @@ final class DailyCheckHook: NSObject, SPUUpdaterDelegate {
     }
     func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
         // "No update" also arrives as an abort; only a real failure (no network, a broken feed) is shown as one.
-        let noUpdate = (error as NSError).domain == SUSparkleErrorDomain && (error as NSError).code == SUNoUpdateError
+        let sparkleError = error as NSError
+        let noUpdate = sparkleError.domain == SUSparkleErrorDomain && sparkleError.code == 1001
         Task { @MainActor in if !noUpdate { UpdateController.shared.found(.failed) } }
     }
 }

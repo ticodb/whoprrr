@@ -179,7 +179,7 @@ private struct PresetFile: Codable, Sendable {
 
     init(from decoder: Decoder) throws {
         let fields = try decoder.container(keyedBy: CodingKeys.self)
-        if let current = try fields.decodeIfPresent(PresetCatalog.self, forKey: .catalog) {
+        if let current = try? fields.decode(PresetCatalog.self, forKey: .catalog) {
             catalog = current
             pending = try fields.decodeIfPresent(Pending.self, forKey: .pending)
         } else {
@@ -200,15 +200,35 @@ public final class PresetLibrary: ObservableObject {
     }
 
     private let store: JSONStore<PresetFile>
+    public let preservesUnreadableFile: Bool
     @Published private var catalog: PresetCatalog
 
     public init(url: URL? = nil, recipes: RecipeStore? = nil) {
         store = url.map { JSONStore<PresetFile>(url: $0) } ?? JSONStore<PresetFile>(name: "presets")
-        let file = store.load(default: PresetFile())
+        let (file, protected) = Self.load(at: store.url)
+        preservesUnreadableFile = protected
         catalog = file.catalog
         if let pending = file.pending, let recipes {
             if !recipes.hasPresetVersion(pending.recipe.after) { catalog = pending.previous }
             store.save(PresetFile(catalog: catalog))
+        }
+    }
+
+    private static func load(at url: URL) -> (PresetFile, Bool) {
+        let manager = FileManager.default
+        do {
+            let data = try Data(contentsOf: url)
+            return (try JSONDecoder().decode(PresetFile.self, from: data), false)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile
+            && (try? manager.destinationOfSymbolicLink(atPath: url.path)) == nil {
+            return (PresetFile(), false)
+        } catch {
+            let stamp = Date.now.ISO8601Format().replacingOccurrences(of: ":", with: "-")
+            let copy = JSONStore<PresetFile>.uniqueSibling(of: url) { number in
+                url.appendingPathExtension("unreadable-\(stamp)" + (number == 1 ? "" : "-\(number)"))
+            }
+            try? manager.copyItem(at: url, to: copy)
+            return (PresetFile(), true)
         }
     }
 
@@ -223,11 +243,10 @@ public final class PresetLibrary: ObservableObject {
 
     /// The existing entry point for a part taken from the shelf. Taking a part does not apply it.
     @discardableResult
-    public func save(_ name: String, data: Data, for surface: String) -> SavedPreset {
+    public func save(_ name: String, data: Data, for surface: String) -> SavedPreset? {
         var next = catalog
         let result = next.save(name, data: data, for: surface, replacing: true)
-        commit(next)
-        return result
+        return commit(next) ? result : nil
     }
 
     @discardableResult
@@ -302,6 +321,7 @@ public final class PresetLibrary: ObservableObject {
     @discardableResult
     private func commit(_ next: PresetCatalog, recipes: RecipeStore? = nil, edit: PresetRecipeEdit? = nil,
                         apply: Bool = false) -> Bool {
+        guard !preservesUnreadableFile else { return false }
         guard let recipes, let edit else {
             guard store.save(PresetFile(catalog: next)) else { return false }
             catalog = next

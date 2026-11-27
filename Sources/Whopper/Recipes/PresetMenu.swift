@@ -49,7 +49,11 @@ final class PresetActions: ObservableObject {
         return true
     }
 
-    func couldNotSave() { problem = "Could not save the preset changes." }
+    func couldNotSave() {
+        problem = Shared.presets.preservesUnreadableFile
+            ? "Whoprrr couldn’t read your presets file. It was kept in place and preset changes can’t be saved."
+            : "Could not save the preset changes."
+    }
 }
 
 struct PresetMenu: View {
