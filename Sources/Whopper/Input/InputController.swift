@@ -158,14 +158,6 @@ final class InputController: ObservableObject {
         }
     }
 
-    /// Opens and closes an isolated tap without posting any event. Never prompts: it runs only when the grants read as on.
-    func tapOpensForSetup() -> Bool {
-        guard CGPreflightListenEventAccess(), CGPreflightPostEventAccess(), AXIsProcessTrusted() else { return false }
-        let test = EventTapRunner(engine: RemapEngine(), poster: EventPoster())
-        defer { test.stop() }
-        return test.start() == .running
-    }
-
     /// An isolated remap test that cannot load HID mappings, take over Logitech buttons or request a grant.
     func verifyForSetup() async -> Bool {
         guard CGPreflightListenEventAccess(), CGPreflightPostEventAccess(), AXIsProcessTrusted() else { return false }
