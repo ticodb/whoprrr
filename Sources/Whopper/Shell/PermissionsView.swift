@@ -54,7 +54,7 @@ struct PermissionsView: View {
                 if !parked.isEmpty {
                     Button("Continue setup") { setup.continueParked(parked) }.buttonStyle(.brand)
                 } else if !users.isEmpty && status != .granted && (!checked || status != .unknown) && p != .camera {
-                    Button("Grant") { setup.review(p, for: Set(users)); refreshSoon() }.buttonStyle(.brand)
+                    Button("Grant") { setup.guideGrant(p); refreshSoon() }.buttonStyle(.brand)
                 }
                 if p != .micDriver {
                     Button("Open pane") { NSWorkspace.shared.open(p.settingsURL) }.buttonStyle(.link).font(Brand.caption)

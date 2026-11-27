@@ -75,11 +75,15 @@ final class SetupChecks: TasteProbing {
             return await checkWindows(mode)
         case .remap:
             if mode == .afterUpdate {
-                // No synthetic keys after an update: something else may be bound to them. Only open and close a test tap.
-                let open = Shared.input.tapOpensForSetup()
-                let grant: Permission = CGPreflightPostEventAccess() ? .inputMonitoring : .accessibility
-                return open ? TasteFinding(.works, detail: "Whoprrr can watch the keyboard.")
-                    : TasteFinding(.notWorking, grants: [grant], detail: "Whoprrr could not watch the keyboard.")
+                // No synthetic keys and no second tap after an update. The running remapper is the proof; it starts
+                // alongside this check, so give it a moment. Only a definite denial names a grant.
+                for _ in 0..<10 where Shared.input.status == .off && !Task.isCancelled { try? await Task.sleep(for: .milliseconds(200)) }
+                switch Shared.input.status {
+                case .running, .paused: return TasteFinding(.works, detail: "The remapper is running.")
+                case .needsAccessibility: return TasteFinding(.notWorking, grants: [.accessibility], detail: "Accessibility is off for Whoprrr.")
+                case .needsInputMonitoring: return TasteFinding(.notWorking, grants: [.inputMonitoring], detail: "Input Monitoring is off for Whoprrr.")
+                case .off, .failed: return TasteFinding(.needsCheck, detail: "Run Test remapping to confirm.")
+                }
             }
             let worked = await Shared.input.verifyForSetup()
             let grant: Permission = CGPreflightPostEventAccess() ? .inputMonitoring : .accessibility
@@ -147,13 +151,13 @@ final class SetupChecks: TasteProbing {
 
     private func checkWindows(_ mode: TasteMode) async -> TasteFinding {
         if mode == .afterUpdate {
-            let answered = await Task.detached {
+            // Only "not trusted" is a definite failure. A busy app answering .cannotComplete says nothing about the grant.
+            let disabled = await Task.detached {
+                guard AXIsProcessTrusted() else { return true }
                 var app: CFTypeRef?
-                let result = AXUIElementCopyAttributeValue(AXUIElementCreateSystemWide(), kAXFocusedApplicationAttribute as CFString, &app)
-                return result == .success || result == .noValue
+                return AXUIElementCopyAttributeValue(AXUIElementCreateSystemWide(), kAXFocusedApplicationAttribute as CFString, &app) == .apiDisabled
             }.value
-            return check(answered, "The Accessibility window service answered.",
-                         "The Accessibility window service did not answer.", grants: [.accessibility])
+            return check(!disabled, "Accessibility is on for Whoprrr.", "Accessibility is off for Whoprrr.", grants: [.accessibility])
         }
         let screens = ScreenMap.current()
         // The target is this app's window. Keep its main thread available to answer AX requests.

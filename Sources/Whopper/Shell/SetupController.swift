@@ -213,14 +213,14 @@ final class SetupController: ObservableObject {
         startGrant(grant, requireToggle: isGranted(grant) && isStale(grant))
     }
 
-    private func startGrant(_ grant: Permission, requireToggle: Bool = false) {
+    private func startGrant(_ grant: Permission, requireToggle: Bool = false, track: Bool = true) {
         guard !working, LicenseController.shared.isLicensed,
               ProcessInfo.processInfo.environment["WHOPPER_NO_START"] != "1" else { return }
         note = requireToggle ? "Turn this switch off, then on again." : nil
         waitingForSwitchOff = requireToggle ? grant : nil
         attemptedGrant = grant
-        progress.askingAgain = grant
-        if grant == .inputMonitoring, requireToggle || states[grant] != .granted { inputRestartRequested = true }
+        if track { progress.askingAgain = grant }
+        if track, grant == .inputMonitoring, requireToggle || states[grant] != .granted { inputRestartRequested = true }
         guide.show(grant)
         switch grant {
         case .systemAudio:
@@ -243,7 +243,7 @@ final class SetupController: ObservableObject {
                 // Give the explicit user action time to finish before a background-style read.
                 Task {
                     try? await Task.sleep(for: .milliseconds(600))
-                    guard attemptedGrant == grant, progress.askingAgain == grant else { return }
+                    guard attemptedGrant == grant, !track || progress.askingAgain == grant else { return }
                     _ = NSPasteboard.general.string(forType: .string)
                     openSettings(grant)
                 }
@@ -351,11 +351,10 @@ final class SetupController: ObservableObject {
         }
     }
 
-    func review(_ permission: Permission, for features: Set<Feature>) {
-        for feature in features where progress.parked[feature] == nil {
-            progress.parked[feature] = TasteFinding(.needsCheck, grants: [permission], detail: "Check \(permission.title) to continue.")
-        }
-        continueParked(features)
+    /// A grant asked for from Permissions or a feature page. Only guides; it never parks or pauses anything,
+    /// so backing out leaves every feature as it was.
+    func guideGrant(_ grant: Permission) {
+        startGrant(grant, track: false)
     }
 
     func continueParked(_ features: Set<Feature>? = nil) {
