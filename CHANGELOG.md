@@ -5,6 +5,7 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 ## Unreleased
 
 ### Added
+- **Mixer** on the Audio page. Turn individual apps down or mute them. Recipes remember the apps you adjust, and shared setups and setup files leave app volumes out.
 - **One menu for presets** in Audio, Microphone, Windows, Keys and mouse, and Clipboard. It shows which preset is in use and whether you edited it. Update with one click or ⌘U. When the active recipe uses those settings, the same action saves the recipe and offers one Undo for both. Manage presets to rename them, or to hide or restore built-ins.
 - **Picklsss milestones** celebrate your first take, first accepted setup, first keep, and the ranks and takes that follow. Every take and share adds a pickle. See your burger grow on “My shared setups”.
 

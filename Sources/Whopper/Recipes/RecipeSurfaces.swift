@@ -17,10 +17,16 @@ extension AudioModel: RecipeSurface {
         s.knownNames = [:]
         return RecipeJSON.encode(s)
     }
+    func canonicalRecipeData(_ data: Data) -> Data {
+        guard var s = RecipeJSON.decode(AudioSettings.self, from: data) else { return data }
+        for (id, app) in s.mix.apps { s.mix.set(id, volume: app.volume, muted: app.muted, name: "") }
+        return RecipeJSON.encode(s) ?? data
+    }
     func applyRecipeData(_ data: Data) -> Bool {
         guard var s = RecipeJSON.decode(AudioSettings.self, from: data) else { return false }
         s.eq.permissionVerified = settings.eq.permissionVerified
         s.knownNames = settings.knownNames
+        s.mix = withLiveMixNames(s.mix)
         settings = s
         return true
     }
@@ -143,6 +149,11 @@ struct PresetSurface {
 struct MicPresetPayload: Codable {
     var gainDB: Double, highPassEnabled: Bool, highPassHz: Double, eq: EQProfile, gate: GateSettings, compressor: CompressorSettings, plugins: [PluginSlot]
 }
+private struct SystemSoundPreset: Codable {
+    var profile: EQProfile
+    var mix: MixSettings
+}
+
 struct OutputFXPayload: Codable { var dynamics: OutputDynamicsSettings; var plugins: [PluginSlot] }
 struct RoutingPayload: Codable { var inputPin: InputPinPolicy; var keepAlive: [String: KeepAliveSettings] }
 
@@ -160,12 +171,26 @@ enum PresetSurfaces {
         let device = a.eqPerDevice ? a.eqDeviceUID : nil
         return PresetSurface(key: "audio.eq", title: "System sound", device: device, deviceName: device.map(a.name(for:)),
                              factory: factoryEQ,
-                             capture: { RecipeJSON.encode(device.flatMap { a.settings.eq.profiles[$0] } ?? a.settings.eq.defaultProfile) },
-                             apply: { d in
-                                 guard let p = RecipeJSON.decode(EQProfile.self, from: d) else { return false }
-                                 if let device { a.settings.eq.profiles[device] = p } else { a.settings.eq.defaultProfile = p }
+                             capture: {
+                                 let profile = device.flatMap { a.settings.eq.profiles[$0] } ?? a.settings.eq.defaultProfile
+                                 return RecipeJSON.encode(SystemSoundPreset(profile: profile, mix: a.settings.mix))
+                             },
+                             apply: { data in
+                                 let preset = RecipeJSON.decode(SystemSoundPreset.self, from: data)
+                                 // Older and built-in presets, including those taken from shared setups, are EQ curves.
+                                 guard let profile = preset?.profile ?? RecipeJSON.decode(EQProfile.self, from: data) else { return false }
+                                 var settings = a.settings
+                                 if let device { settings.eq.profiles[device] = profile } else { settings.eq.defaultProfile = profile }
+                                 if let preset { settings.mix = a.withLiveMixNames(preset.mix) }
+                                 a.settings = settings
                                  return true
-                             }, canonical: { canonical(EQProfile.self, $0) })
+                             }, matches: { live, stored in
+                                 guard let current = RecipeJSON.decode(SystemSoundPreset.self, from: live) else { return false }
+                                 if let saved = RecipeJSON.decode(SystemSoundPreset.self, from: stored) {
+                                     return current.profile == saved.profile && current.mix.matchesLevels(of: saved.mix)
+                                 }
+                                 return current.profile == RecipeJSON.decode(EQProfile.self, from: stored)
+                             })
     }
 
     static func outputFX(_ a: AudioModel) -> PresetSurface {
