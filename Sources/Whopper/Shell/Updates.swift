@@ -11,6 +11,24 @@ final class DailyCheckHook: NSObject, SPUUpdaterDelegate {
     func updater(_ updater: SPUUpdater, didFinishLoading appcast: SUAppcast) {
         Task { @MainActor in await PicklsssController.shared.runDailyIfDue(fromUpdateCheck: true) }
     }
+    // What the last look at the update feed found, for the menu-bar panel's update line.
+    func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        let version = item.displayVersionString
+        Task { @MainActor in UpdateController.shared.found(.available(version)) }
+    }
+    func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
+        Task { @MainActor in UpdateController.shared.found(.upToDate) }
+    }
+    func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
+        // "No update" also arrives as an abort; only a real failure (no network, a broken feed) is shown as one.
+        let noUpdate = (error as NSError).domain == SUSparkleErrorDomain && (error as NSError).code == 1001
+        Task { @MainActor in if !noUpdate { UpdateController.shared.found(.failed) } }
+    }
+}
+
+/// What the panel's update line says.
+enum UpdateStatus: Equatable {
+    case unknown, checking, upToDate, available(String), failed
 }
 
 @MainActor
@@ -21,6 +39,8 @@ final class UpdateController: ObservableObject {
     private lazy var controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: hook, userDriverDelegate: nil)
     @Published private(set) var canCheck = false
     @Published private(set) var isAvailable = false
+    @Published private(set) var status: UpdateStatus = .unknown
+    private var lastLook: Date?
     private var observation: NSKeyValueObservation?
 
     private var updater: SPUUpdater { controller.updater }
@@ -43,6 +63,20 @@ final class UpdateController: ObservableObject {
     }
 
     func checkForUpdates() { controller.checkForUpdates(nil) }
+
+    /// Looks at the update feed quietly (no window) so the panel can say "Up to date" or name the new version. Asked for each
+    /// time the panel opens; it really looks at most once every 10 minutes, and at once when `force` is set (a click).
+    func look(force: Bool = false) {
+        guard isAvailable, status != .checking else { return }
+        if !force, let lastLook, Date().timeIntervalSince(lastLook) < 600, status != .unknown, status != .failed { return }
+        guard updater.canCheckForUpdates else { return }
+        lastLook = Date()
+        status = .checking
+        updater.checkForUpdateInformation()
+        // A look that never answers (no network at all) must not leave "Checking…" on screen.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in if self?.status == .checking { self?.status = .failed } }
+    }
+    func found(_ s: UpdateStatus) { status = s }
 
     var automaticallyChecks: Bool {
         get { updater.automaticallyChecksForUpdates }
