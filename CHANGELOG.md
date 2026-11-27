@@ -2,7 +2,9 @@
 
 All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://semver.org); betas are labelled `0.9.0 beta N`.
 
-## Unreleased
+## 0.9.0 beta 4: recipes like documents, and Picklsss (shared setups)
+
+Released 2026-11-27.
 
 ### Added
 - **Recipes behave like documents**: while the active recipe differs from your settings, the main window shows a save bar on every page (Save, Save as new recipe, Put back). It waits until you have left the settings alone for 2 seconds; until then only a small "Cookin'" label shows. After saving there is a confirmation with Undo, and every recipe keeps the version from before its last save: "Go back to the version before…" in its menu swaps the two, so going back can itself be undone.
@@ -20,6 +22,9 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 
 ### Changed
 - "Update with my current settings" in a recipe's menu and the "Active, changed" chip are replaced by the save bar.
+
+### Known limits
+- The shared-setups extra ($4) cannot be bought yet: its "Get Picklsss" button opens the "Find your downloads" page, and the website does not offer the extra until it goes on sale. Browsing, opening, reviewing and sharing work; taking a setup onto your Mac stays locked until then, unless a setup you shared was accepted.
 
 ## 0.9.0 beta 3: recipes no longer look changed when they are not
 
