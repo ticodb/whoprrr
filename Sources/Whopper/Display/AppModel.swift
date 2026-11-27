@@ -248,6 +248,17 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Adds a preset taken from a shared setup for the connected display whose gear key is `displayKey`. The name is made unique for
+    /// that display. Returns the name it was saved under, or nil when that display is not connected or the file could not be written.
+    func addSharedPreset(name: String, displayKey key: String, values: [String: Int]) -> String? {
+        guard let d = displays.first(where: { displayKey($0) == key }) else { return nil }
+        let taken = Set(presets.filter { $0.identity.matches(d.identity) }.map(\.name))
+        var n = name, i = 2
+        while taken.contains(n) { n = "\(name) \(i)"; i += 1 }
+        let p = Preset(name: n, identity: d.identity, valuesByKey: values, notes: "From a shared setup")
+        do { try store.save(p); loadPresets(); return n } catch { presetError = "Could not save: \(error)"; return nil }
+    }
+
     func deletePreset(_ p: Preset) { try? store.delete(id: p.id); loadPresets() }
 
     func apply(_ p: Preset) {

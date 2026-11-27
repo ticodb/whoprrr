@@ -48,7 +48,9 @@ let package = Package(
         .testTarget(name: "ClipboardCoreTests", dependencies: ["ClipboardCore"], path: "Tests/ClipboardCoreTests"),
         .testTarget(name: "InputCoreTests", dependencies: ["InputCore"], path: "Tests/InputCoreTests"),
         .testTarget(name: "LogitechCoreTests", dependencies: ["LogitechCore"], path: "Tests/LogitechCoreTests"),
-        .testTarget(name: "WhopperKitTests", dependencies: ["WhopperKit"], path: "Tests/WhopperKitTests"),
+        // The shared-setup tests build real settings from every module, so a renamed field breaks them instead of the shelf.
+        .testTarget(name: "WhopperKitTests", dependencies: ["WhopperKit", "AudioCore", "WindowCore", "ClipboardCore", "InputCore", "DisplayCore"],
+                    path: "Tests/WhopperKitTests", resources: [.copy("Fixtures")]),
     ],
     swiftLanguageModes: [.v5]
 )

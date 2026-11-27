@@ -36,6 +36,36 @@ final class LicenseController: ObservableObject {
 
     var isLicensed: Bool { skipped || state.isLicensed }
 
+    /// The pass this Mac holds, whether or not it has run out (the server decides what an old one may do).
+    var currentPass: LicensePass? {
+        switch state { case .licensed(let p), .expiredOffline(let p): return p; case .needsKey: return nil }
+    }
+
+    /// Whether the pass says the buyer has the shared-setups extra. The server has the last word on a take.
+    var hasPicklsss: Bool { PicklsssLock.hasExtra(currentPass) }
+
+    /// The pass text for a shelf call: nil without one (nothing to send), after refreshing one that has run out.
+    func passForShelf() async -> String? {
+        guard !skipped, stored.pass != nil else { return nil }
+        if case .expiredOffline = state { await renewIfDue(force: true) }
+        return state.isLicensed ? stored.pass : nil
+    }
+
+    /// A shelf call was turned away because this Mac is not allowed to use its pass (removed, key off, not ours).
+    /// The same handling as a refused renewal: drop the pass and say why in the server's words.
+    func passRejected(_ message: String) {
+        guard !skipped, stored.pass != nil else { return }
+        save { $0.pass = nil; $0.slot = nil; $0.of = nil }
+        state = .needsKey(message: message)
+    }
+
+    /// "Check now": asks the server for a fresh pass at once. Returns whether the shared-setups extra is on afterwards.
+    @discardableResult
+    func checkNow() async -> Bool {
+        await renewIfDue(force: true)
+        return hasPicklsss
+    }
+
     private init() {
         stored = store.load(default: Stored())
         deviceId = DeviceID.derive(platformUUID: Self.platformUUID())

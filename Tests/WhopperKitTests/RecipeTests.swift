@@ -137,7 +137,7 @@ final class RecipeTests: XCTestCase {
         XCTAssertEqual(lib.presets(for: "audio.mic").map(\.name), ["Podcast"])
     }
 
-    func testEqualSettingsInDifferentBytesAreNotAChange() {
+    func testEqualSettingsInDifferentBytesAreNotUnsavedChanges() {
         let (store, _, _) = makeStore(tmp("canon"))
         let tiles = SetSurface(["left", "right", "max"])
         store.register(tiles)
@@ -145,7 +145,9 @@ final class RecipeTests: XCTestCase {
         XCTAssertFalse(store.isModified(r.id))
         tiles.order = ["max", "left", "right"]          // the same set, as another launch would write it
         XCTAssertFalse(store.isModified(r.id), "the same settings in another order are not a change")
+        XCTAssertEqual(store.changedParts(), [])
         tiles.order = ["max", "left"]                   // a real change
         XCTAssertTrue(store.isModified(r.id))
+        XCTAssertEqual(store.changedParts(), ["tiles"])
     }
 }

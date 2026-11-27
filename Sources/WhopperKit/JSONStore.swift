@@ -1,7 +1,8 @@
 import Foundation
 
 /// Small atomic JSON file store under Application Support/Whopper. Corrupt or missing files fall back
-/// to the default value; a corrupt file is kept aside as `.bad` instead of being overwritten silently.
+/// to the default value; a corrupt file is kept aside as `.bad` (`.bad-2`, `.bad-3`… if one is already there) instead of
+/// being overwritten silently.
 public final class JSONStore<T: Codable & Sendable>: @unchecked Sendable {
     public let url: URL
     private let lock = NSLock()
@@ -23,8 +24,16 @@ public final class JSONStore<T: Codable & Sendable>: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         guard let data = try? Data(contentsOf: url) else { return fallback }
         if let v = try? JSONDecoder().decode(T.self, from: data) { return v }
-        try? FileManager.default.moveItem(at: url, to: url.appendingPathExtension("bad"))
+        let kept = Self.uniqueSibling(of: url, naming: { n in url.appendingPathExtension(n == 1 ? "bad" : "bad-\(n)") })
+        try? FileManager.default.moveItem(at: url, to: kept)
         return fallback
+    }
+
+    /// The first of `naming(1)`, `naming(2)`… that does not exist yet, so a file kept aside never replaces an earlier one.
+    static func uniqueSibling(of url: URL, naming: (Int) -> URL) -> URL {
+        var n = 1
+        while FileManager.default.fileExists(atPath: naming(n).path) { n += 1 }
+        return naming(n)
     }
 
     @discardableResult
