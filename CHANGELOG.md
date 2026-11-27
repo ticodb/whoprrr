@@ -2,6 +2,19 @@
 
 All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://semver.org); betas are labelled `0.9.0 beta N`.
 
+## 0.9.0 beta 5: buy Picklsss straight from the app
+
+Released 2026-11-27.
+
+### Changed
+- **"Get Picklsss" opens a page for this purchase.** Whoprrr sends its pass to whoprrr.app and gets back a one-time link to a small page, "Add to your order". It shows your order number, a hidden form of your email and the name of this Mac, and never your key. There you can tick Picklsss ($4, setups other people shared, paid once) and Frrries ($4, 4 more devices), pay, and come back. The link works for 10 minutes and ends after one payment. If the link has timed out, press the button again.
+- **Whoprrr notices a purchase made somewhere else.** When you open the Picklsss page or the Extras page and the extra is not on this Mac yet, Whoprrr asks for a fresh pass in the background, at most once every 10 minutes. Before, it learned about a purchase after "Check now" or within about a week.
+- Coming back from paying with nothing found now says "Not on your key yet. If you just paid, give it a moment." beside "Check now".
+
+### Fixed
+- If whoprrr.app cannot be reached when you press "Get Picklsss", Whoprrr says so ("Could not reach whoprrr.app. Check your connection and try again.") and offers "Find my order by email instead", which opens the page beta 4 opened. Buying does not depend on the new link.
+- The project builds again on GitHub's build machines: one long expression in the shared-setups code was split into smaller steps. Nothing about how it behaves changes.
+
 ## 0.9.0 beta 4: recipes like documents, and Picklsss (shared setups)
 
 Released 2026-11-27.

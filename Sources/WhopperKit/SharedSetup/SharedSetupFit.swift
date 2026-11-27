@@ -633,8 +633,23 @@ private enum Merger {
             }
         case "microphone":
             if !lines.isEmpty, let m = au?["mic"] {
-                add("audio.mic", "Microphone chain", .object(["gainDB": m["gainDB"] ?? .number(0), "highPassEnabled": m["highPassEnabled"] ?? .bool(true), "highPassHz": m["highPassHz"] ?? .number(80),
-                                                              "eq": m["eq"] ?? curve(nil), "gate": m["gate"] ?? .object([:]), "compressor": m["compressor"] ?? compressor(nil), "plugins": m["plugins"] ?? .array([])]))
+                // Split into typed pieces: one big literal of `??` expressions is too slow for the compiler to type-check.
+                let gain: J = m["gainDB"] ?? .number(0)
+                let highPassOn: J = m["highPassEnabled"] ?? .bool(true)
+                let highPassHz: J = m["highPassHz"] ?? .number(80)
+                let eq: J = m["eq"] ?? curve(nil)
+                let gate: J = m["gate"] ?? .object([:])
+                let comp: J = m["compressor"] ?? compressor(nil)
+                let plugins: J = m["plugins"] ?? .array([])
+                var chain: [String: J] = [:]
+                chain["gainDB"] = gain
+                chain["highPassEnabled"] = highPassOn
+                chain["highPassHz"] = highPassHz
+                chain["eq"] = eq
+                chain["gate"] = gate
+                chain["compressor"] = comp
+                chain["plugins"] = plugins
+                add("audio.mic", "Microphone chain", .object(chain))
             }
         case "windows": if !lines.isEmpty { add("windows", "Windows", sections["windows"]) }
         case "keys": if !lines.isEmpty { add("input", "Keys and mouse rules", sections["input"]) }

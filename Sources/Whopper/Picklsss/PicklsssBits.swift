@@ -69,6 +69,7 @@ struct LockCard: View {
                 Text("whoprrr.app opened in your browser. Pay there; this window updates by itself when you come back.")
                     .font(Brand.subheadline).fixedSize(horizontal: false, vertical: true)
             }
+            BuyLinkProblem()
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) { buttons }
                 VStack(alignment: .leading, spacing: 8) { buttons }
@@ -82,14 +83,14 @@ struct LockCard: View {
     }
 
     @ViewBuilder private var buttons: some View {
-        Button(c.awaitingPurchase ? "Open it again" : "Get Picklsss · $4") { c.openPersonalPage() }.buttonStyle(.brand)
+        Button(c.awaitingPurchase ? "Open it again" : "Get Picklsss · $4") { Task { await c.openBuyPage() } }.buttonStyle(.brand).disabled(c.makingLink)
         Button(c.checkStatus == .checking ? "Checking…" : "Check now") { Task { await c.checkNow() } }.buttonStyle(.brandQuiet).disabled(c.checkStatus == .checking)
         Button("I have a key") { enteringKey.toggle() }.buttonStyle(.brandQuiet)
     }
 
     private var status: String? {
         switch c.checkStatus {
-        case .notYet: "Nothing found yet. If you have just paid, give it a moment and press Check now again."
+        case .notYet: PurchaseWords.notYet
         case .found: "Found your order."
         default: nil
         }
@@ -108,6 +109,20 @@ struct LockCard: View {
     }
 
     private func activate() { Task { await license.activate(key: key); if license.hasPicklsss { key = ""; enteringKey = false } } }
+}
+
+/// When the one-time buy link could not be made: what happened in plain words, and the old way in beside it.
+struct BuyLinkProblem: View {
+    @ObservedObject private var c = PicklsssController.shared
+
+    var body: some View {
+        if let message = c.linkProblem {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(message).font(Brand.subheadline).foregroundStyle(Brand.accentText).fixedSize(horizontal: false, vertical: true)
+                Button(PurchaseWords.findByEmail) { c.openPersonalPage() }.buttonStyle(.brandQuiet)
+            }
+        }
+    }
 }
 
 /// News about what a person took: a new version (offered, never applied) or a removal (announced in plain words, with "Put back").

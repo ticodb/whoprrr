@@ -19,6 +19,7 @@ final class PicklsssController: ObservableObject {
     private let store: JSONStore<PicklsssState>
     @Published private(set) var state: PicklsssState
     private(set) var client: ShelfClient
+    private let linkClient: PurchaseLinkClient
     let tracker = KeepTracker()
 
     // The shelf
@@ -44,6 +45,10 @@ final class PicklsssController: ObservableObject {
     @Published private(set) var checkStatus: CheckStatus = .idle
     /// Set when the person was sent to the browser to pay; the app then re-checks its pass when it comes to the front.
     @Published private(set) var awaitingPurchase = false
+    /// Set when the one-time buy link could not be made: the plain words to show beside "Find my order by email instead".
+    @Published private(set) var linkProblem: String?
+    @Published private(set) var makingLink = false
+    private var passGate = PassRefreshGate()
     private var lastCheck = Date.distantPast
     private var becameActive: NSObjectProtocol?
     private var woke: NSObjectProtocol?
@@ -64,6 +69,7 @@ final class PicklsssController: ObservableObject {
         store = s
         state = s.load(default: PicklsssState())
         client = ShelfClient(transport: URLSessionShelfTransport(server: LicenseController.shared.server))
+        linkClient = PurchaseLinkClient(transport: URLSessionShelfTransport(server: LicenseController.shared.server), server: LicenseController.shared.server)
     }
 
     var recipes: RecipeStore { Shared.recipes }
@@ -205,13 +211,56 @@ final class PicklsssController: ObservableObject {
 
     // MARK: The lock
 
+    /// The old way in, and the fallback: the "Find your downloads" page, which sends the personal link to the address they paid with.
     func openPersonalPage() {
         awaitingPurchase = true
+        linkProblem = nil
+        openInBrowser(PersonalPage.url(server: license.server))
+    }
+
+    /// "Get Picklsss": trades this Mac's pass for a one-time link to a small page for this purchase and opens it. A pass the server
+    /// refuses is dropped like a refused renewal. When no link can be made, the person is told plainly and can still go the old way:
+    /// buying never depends on the new call.
+    func openBuyPage() async {
+        guard !makingLink else { return }
+        makingLink = true; linkProblem = nil
+        defer { makingLink = false }
+        guard var pass = await license.passForShelf() else { openPersonalPage(); return }   // no pass: nothing to trade, the old page it is
+        var outcome = await linkClient.request(pass: pass)
+        if outcome == .passExpired {
+            await license.renewIfDue(force: true)
+            if let fresh = await license.passForShelf() { pass = fresh; outcome = await linkClient.request(pass: pass) } else { outcome = .unavailable }
+        }
+        switch outcome {
+        case .ready(let url):
+            awaitingPurchase = true
+            openInBrowser(url)
+        case .revoked(let message):
+            license.passRejected(message)
+        case .busy(let message):
+            linkProblem = message
+        case .passExpired, .unavailable:
+            linkProblem = PurchaseWords.couldNotReach
+        }
+    }
+
+    private func openInBrowser(_ url: URL) {
         #if DEBUG
         // Test runs must not open a browser: say where it would have gone.
-        if ProcessInfo.processInfo.environment["WHOPRRR_NO_BROWSER"] == "1" { FileHandle.standardError.write(Data("would open \(PersonalPage.url(server: license.server))\n".utf8)); return }
+        if ProcessInfo.processInfo.environment["WHOPRRR_NO_BROWSER"] == "1" { FileHandle.standardError.write(Data("would open \(url.absoluteString)\n".utf8)); return }
         #endif
-        NSWorkspace.shared.open(PersonalPage.url(server: license.server))
+        NSWorkspace.shared.open(url)
+    }
+
+    /// The Picklsss page or the Extras page came on screen. If the pass lacks the extra, ask for a fresh pass in the background (a purchase
+    /// may have been made somewhere else), at most once every 10 minutes. Never blocks anything; the page redraws if the extra turns up.
+    func refreshPassIfMissing() {
+        guard !license.skipped, license.currentPass != nil, passGate.allow(now: Date(), hasExtra: hasExtra) else { return }
+        Task {
+            let had = hasExtra
+            let has = await license.checkNow()
+            if has && !had { awaitingPurchase = false; linkProblem = nil; objectWillChange.send() }
+        }
     }
 
     /// "Check now", and what the app does when it comes to the front after the person went to pay.
@@ -232,7 +281,7 @@ final class PicklsssController: ObservableObject {
     }
 
     func clearCheckStatus() { checkStatus = .idle }
-    func stopWaiting() { awaitingPurchase = false; checkStatus = .idle }
+    func stopWaiting() { awaitingPurchase = false; checkStatus = .idle; linkProblem = nil }
 
     // MARK: Counting what you keep
 

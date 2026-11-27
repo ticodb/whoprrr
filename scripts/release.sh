@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export SIGN_IDENTITY="${SIGN_IDENTITY--}"
 VERSION="$(cat VERSION)"
-LABEL="${RELEASE_LABEL-beta 4}"
+LABEL="${RELEASE_LABEL-beta 5}"
 TAG="${VERSION}${LABEL:+-${LABEL// /}}"
 ./scripts/build-app.sh
 
