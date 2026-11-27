@@ -119,4 +119,40 @@ final class SetupProgressTests: XCTestCase {
         store.setEnabled(Set(unbuilt))
         XCTAssertTrue(store.enabled.isEmpty)
     }
+
+    func testAuditOnlyMarksRenewalAndNeverStartsIt() {
+        var progress = SetupProgress(step: .complete)
+        // State left over from an earlier renewal must not carry into this update.
+        progress.renewalStarted = true
+        progress.askingAgain = .accessibility
+        progress.renewedGrants = [.accessibility]
+        let blocked = TasteFinding(.notWorking, grants: [.accessibility], detail: "Accessibility is off for Whoprrr.")
+        let audit = UpdateAudit(findings: [.windows: blocked, .display: TasteFinding(.needsCheck, detail: "Could not check.")],
+                                park: [.windows: blocked], finished: true)
+        let next = progress.applyingAudit(audit, build: "81", now: Date(timeIntervalSince1970: 0))
+        XCTAssertFalse(next.renewalStarted)
+        XCTAssertNil(next.askingAgain)
+        XCTAssertTrue(next.renewedGrants.isEmpty)
+        XCTAssertEqual(next.renewal, [.windows])
+        XCTAssertEqual(Set(next.parked.keys), [.windows])
+        XCTAssertNil(next.parked[.display])
+        XCTAssertNil(next.updateOKUntil)
+        XCTAssertEqual(next.build, "81")
+    }
+
+    func testAuditWithEverythingWorkingShowsOneLineForADay() {
+        let audit = UpdateAudit(findings: [.windows: TasteFinding(.works, detail: "")], park: [:], finished: true)
+        let next = SetupProgress(step: .complete).applyingAudit(audit, build: "81", now: Date(timeIntervalSince1970: 0))
+        XCTAssertEqual(next.updateOKUntil, Date(timeIntervalSince1970: 86_400))
+        XCTAssertTrue(next.renewal.isEmpty)
+        XCTAssertFalse(next.renewalStarted)
+    }
+
+    func testRenewNeedsADeliberatePressInTheFocusedWindow() {
+        let shown = Date(timeIntervalSince1970: 100)
+        XCTAssertFalse(RenewalStart.allowed(shownAt: shown, now: shown.addingTimeInterval(5), windowIsKey: false))
+        XCTAssertFalse(RenewalStart.allowed(shownAt: shown, now: shown.addingTimeInterval(0.2), windowIsKey: true))
+        XCTAssertTrue(RenewalStart.allowed(shownAt: shown, now: shown.addingTimeInterval(1.5), windowIsKey: true))
+        XCTAssertTrue(RenewalStart.allowed(shownAt: nil, now: shown, windowIsKey: true))
+    }
 }

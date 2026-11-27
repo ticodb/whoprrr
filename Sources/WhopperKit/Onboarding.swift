@@ -112,6 +112,25 @@ public struct SetupProgress: Codable, Sendable {
         renewedGrants = read(.renewedGrants, [])
     }
 
+    /// The state after the silent check. It only marks features for renewal: it never starts a grant, so
+    /// `renewalStarted` is always false and nothing is being asked for.
+    public func applyingAudit(_ audit: UpdateAudit, build: String, now: Date) -> SetupProgress {
+        var next = self
+        next.findings.merge(audit.findings) { _, current in current }
+        next.parked.merge(audit.park) { _, current in current }
+        next.build = build
+        next.updateCheckIncomplete = !audit.finished
+        next.updateOKUntil = audit.allWork && next.parked.isEmpty ? now.addingTimeInterval(86_400) : nil
+        if !audit.park.isEmpty { next.renewal.formUnion(audit.park.keys) }
+        next.renewalStarted = false
+        next.askingAgain = nil
+        next.skipped = []
+        next.renewedGrants = []
+        next.grantedByTest = []
+        next.resetAttempts = [:]
+        return next
+    }
+
     /// Features that may run. Parked features keep their settings but stay off. The check after an update never holds
     /// working features back: they run while it reads, and it parks only what definitely stopped working.
     public func allowed(_ enabled: Set<Feature>) -> Set<Feature> {
@@ -270,5 +289,17 @@ private final class AuditGate {
         work?.cancel()
         continuation?.resume()
         continuation = nil
+    }
+}
+
+/// Renew after an update starts System Settings, the guide card and any macOS prompt, so it must be a deliberate press:
+/// in Whoprrr's own focused window, after the window has been on screen long enough to read.
+public enum RenewalStart {
+    public static let settle: TimeInterval = 1.0
+
+    public static func allowed(shownAt: Date?, now: Date, windowIsKey: Bool) -> Bool {
+        guard windowIsKey else { return false }
+        guard let shownAt else { return true }
+        return now.timeIntervalSince(shownAt) >= settle
     }
 }

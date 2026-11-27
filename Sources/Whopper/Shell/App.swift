@@ -42,7 +42,11 @@ enum Shared {
     /// The main window: sidebar of features and a page for each. When it is opened from the menu-bar drawer it appears right beside
     /// the drawer (top edges aligned); otherwise it comes back where you left it. While it is open Whoprrr shows in the Dock and
     /// ⌘-Tab, and goes back to menu-bar only when it closes.
-    static func showWindow(page: AppPage? = nil) {
+    /// `activate: false` puts the window on screen without taking focus from the app the person is typing in,
+    /// so no keystroke meant for another app can press a button here.
+    static var windowIsKey: Bool { window?.isKeyWindow == true && NSApp.isActive }
+
+    static func showWindow(page: AppPage? = nil, activate: Bool = true) {
         SetupController.shared.refreshGrants()
         SetupController.shared.reconcileSetupGrants()
         let drawer = drawerFrame()          // read before activating: activating can close the drawer
@@ -70,8 +74,12 @@ enum Shared {
             let screen = NSScreen.screens.first { $0.frame.intersects(drawer) } ?? NSScreen.main ?? NSScreen.screens[0]
             w.setFrame(PanelPlacement.frame(beside: drawer, size: NSSize(width: 940, height: 700), visible: screen.visibleFrame), display: true)
         }
-        w.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        if activate {
+            w.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        } else {
+            w.orderFrontRegardless()
+        }
     }
 
     /// Makes every settings surface available to recipes, and switches recipes automatically when the connected gear changes.
