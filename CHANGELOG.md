@@ -4,6 +4,11 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 
 ## Unreleased
 
+## 0.9.0 beta 7: guided setup
+
+Released 2026-11-27.
+
+### Added
 - **Setup** takes this Mac from activation through a gear scan, recipe, permission guide and taste test in one window. It picks up where you left off and keeps the settings of any parked feature.
 - **After an update**, Whoprrr checks permissions quietly while your features keep running, and offers to renew only grants that clearly stopped working. The check never shows a macOS prompt or presses keys, and gives up after a few seconds. **Reset and ask again** clears a single supported grant for Whoprrr, only when you press it.
 
