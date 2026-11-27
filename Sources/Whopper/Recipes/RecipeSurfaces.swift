@@ -111,11 +111,33 @@ enum Gear {
 
 // MARK: Per-surface presets (one panel's settings on their own)
 
+@MainActor
 struct PresetSurface {
     let key: String
     let title: String
+    var device: String? = nil
+    var deviceName: String? = nil
+    var factory: [FactoryPreset] = []
+    var sync: () -> Void = {}
     let capture: () -> Data?
     let apply: (Data) -> Bool
+    var canonical: (Data) -> Data = { $0 }
+    var matches: ((Data, Data) -> Bool)? = nil
+    var factoryUpdate: (() -> Data?)? = nil
+
+    var location: PresetLocation { PresetLocation(key, device: device) }
+    var locationName: String { deviceName ?? title }
+    var recipePart: String { String(key.prefix { $0 != "." }) }
+
+    func groups(in library: PresetLibrary) -> PresetGroups {
+        library.groups(at: location, factory: factory, live: capture(), matches: matches ?? { canonical($0) == canonical($1) })
+    }
+
+    func captureUpdate(for entry: PresetEntry) -> Data? {
+        sync()
+        if entry.isFactory, let factoryUpdate { return factoryUpdate() }
+        return capture()
+    }
 }
 
 struct MicPresetPayload: Codable {
@@ -126,45 +148,97 @@ struct RoutingPayload: Codable { var inputPin: InputPinPolicy; var keepAlive: [S
 
 @MainActor
 enum PresetSurfaces {
-    static func eq(_ a: AudioModel) -> PresetSurface {
-        PresetSurface(key: "audio.eq", title: "Equalizer",
-                      capture: { RecipeJSON.encode(a.eqProfile) },
-                      apply: { d in guard let p = RecipeJSON.decode(EQProfile.self, from: d) else { return false }; a.eqProfile = p; return true })
+    private static let factoryEQ = EQProfile.presets.compactMap { preset in
+        RecipeJSON.encode(preset.profile).map { FactoryPreset(id: preset.name, name: preset.name, data: $0) }
     }
+
+    private static func canonical<T: Codable>(_ type: T.Type, _ data: Data) -> Data {
+        RecipeJSON.decode(type, from: data).flatMap(RecipeJSON.encode) ?? data
+    }
+
+    static func eq(_ a: AudioModel) -> PresetSurface {
+        let device = a.eqPerDevice ? a.eqDeviceUID : nil
+        return PresetSurface(key: "audio.eq", title: "System sound", device: device, deviceName: device.map(a.name(for:)),
+                             factory: factoryEQ,
+                             capture: { RecipeJSON.encode(device.flatMap { a.settings.eq.profiles[$0] } ?? a.settings.eq.defaultProfile) },
+                             apply: { d in
+                                 guard let p = RecipeJSON.decode(EQProfile.self, from: d) else { return false }
+                                 if let device { a.settings.eq.profiles[device] = p } else { a.settings.eq.defaultProfile = p }
+                                 return true
+                             }, canonical: { canonical(EQProfile.self, $0) })
+    }
+
     static func outputFX(_ a: AudioModel) -> PresetSurface {
-        PresetSurface(key: "audio.outputfx", title: "Output effects",
-                      capture: { a.syncPluginStates(); return RecipeJSON.encode(OutputFXPayload(dynamics: a.settings.eq.dynamics, plugins: a.settings.eq.plugins)) },
+        PresetSurface(key: "audio.outputfx", title: "System effects", sync: a.syncPluginStates,
+                      capture: { RecipeJSON.encode(OutputFXPayload(dynamics: a.settings.eq.dynamics, plugins: a.settings.eq.plugins)) },
                       apply: { d in
                           guard let p = RecipeJSON.decode(OutputFXPayload.self, from: d) else { return false }
-                          a.settings.eq.dynamics = p.dynamics; a.settings.eq.plugins = p.plugins; return true })
+                          a.settings.eq.dynamics = p.dynamics
+                          a.settings.eq.plugins = p.plugins
+                          return true
+                      }, canonical: { canonical(OutputFXPayload.self, $0) })
     }
+
     static func mic(_ a: AudioModel) -> PresetSurface {
-        PresetSurface(key: "audio.mic", title: "Microphone chain",
+        PresetSurface(key: "audio.mic", title: "Microphone", factory: factoryEQ, sync: a.syncPluginStates,
                       capture: {
-                          a.syncPluginStates(); let m = a.settings.mic
-                          return RecipeJSON.encode(MicPresetPayload(gainDB: m.gainDB, highPassEnabled: m.highPassEnabled, highPassHz: m.highPassHz, eq: m.eq, gate: m.gate, compressor: m.compressor, plugins: m.plugins)) },
+                          let m = a.settings.mic
+                          return RecipeJSON.encode(MicPresetPayload(gainDB: m.gainDB, highPassEnabled: m.highPassEnabled, highPassHz: m.highPassHz, eq: m.eq, gate: m.gate, compressor: m.compressor, plugins: m.plugins))
+                      },
                       apply: { d in
+                          // The built-ins for the mic have always been EQ curves, leaving the rest of the chain in place.
+                          if var eq = RecipeJSON.decode(EQProfile.self, from: d) {
+                              eq.enabled = a.settings.mic.eq.enabled
+                              a.settings.mic.eq = eq
+                              return true
+                          }
                           guard let p = RecipeJSON.decode(MicPresetPayload.self, from: d) else { return false }
                           a.settings.mic.gainDB = p.gainDB; a.settings.mic.highPassEnabled = p.highPassEnabled; a.settings.mic.highPassHz = p.highPassHz
                           a.settings.mic.eq = p.eq; a.settings.mic.gate = p.gate; a.settings.mic.compressor = p.compressor; a.settings.mic.plugins = p.plugins
-                          return true })
+                          return true
+                      }, matches: { live, stored in
+                          if let profile = RecipeJSON.decode(EQProfile.self, from: stored),
+                             let mic = RecipeJSON.decode(MicPresetPayload.self, from: live) {
+                              var eq = profile
+                              eq.enabled = mic.eq.enabled
+                              return mic.eq == eq
+                          }
+                          return canonical(MicPresetPayload.self, live) == canonical(MicPresetPayload.self, stored)
+                      }, factoryUpdate: { RecipeJSON.encode(a.settings.mic.eq) })
     }
+
     static func routing(_ a: AudioModel) -> PresetSurface {
         PresetSurface(key: "audio.routing", title: "Input and keep-awake",
                       capture: { RecipeJSON.encode(RoutingPayload(inputPin: a.settings.inputPin, keepAlive: a.settings.keepAlive)) },
                       apply: { d in guard let p = RecipeJSON.decode(RoutingPayload.self, from: d) else { return false }
-                          a.settings.inputPin = p.inputPin; a.settings.keepAlive = p.keepAlive; return true })
+                          a.settings.inputPin = p.inputPin; a.settings.keepAlive = p.keepAlive; return true },
+                      canonical: { canonical(RoutingPayload.self, $0) })
     }
+
     static func windows(_ w: WindowModel) -> PresetSurface {
-        PresetSurface(key: "windows", title: "Windows", capture: { RecipeJSON.encode(w.settings) },
-                      apply: { d in guard let s = RecipeJSON.decode(WindowSettings.self, from: d) else { return false }; w.settings = s; return true })
+        PresetSurface(key: "windows", title: "Windows", capture: w.captureRecipeData,
+                      apply: w.applyRecipeData, canonical: w.canonicalRecipeData)
     }
+
     static func clipboard(_ c: ClipboardController) -> PresetSurface {
-        PresetSurface(key: "clipboard", title: "Clipboard", capture: { RecipeJSON.encode(c.settings) },
-                      apply: { d in guard let s = RecipeJSON.decode(ClipboardSettings.self, from: d) else { return false }; c.settings = s; return true })
+        PresetSurface(key: "clipboard", title: "Clipboard", capture: c.captureRecipeData,
+                      apply: c.applyRecipeData, canonical: { canonical(ClipboardSettings.self, $0) })
     }
+
     static func input(_ i: InputController) -> PresetSurface {
-        PresetSurface(key: "input", title: "Keys and mouse rules", capture: { RecipeJSON.encode(i.settings) },
-                      apply: { d in guard let s = RecipeJSON.decode(InputSettings.self, from: d) else { return false }; i.settings = s; return true })
+        PresetSurface(key: "input", title: "Keys and mouse", capture: i.captureRecipeData,
+                      apply: i.applyRecipeData, canonical: { canonical(InputSettings.self, $0) })
+    }
+    static func surface(_ key: String) -> PresetSurface? {
+        switch key {
+        case "audio.eq": eq(Shared.audio)
+        case "audio.outputfx": outputFX(Shared.audio)
+        case "audio.mic": mic(Shared.audio)
+        case "audio.routing": routing(Shared.audio)
+        case "windows": windows(Shared.windows)
+        case "clipboard": clipboard(Shared.clipboard)
+        case "input": input(Shared.input)
+        default: nil
+        }
     }
 }

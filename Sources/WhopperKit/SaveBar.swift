@@ -29,6 +29,7 @@ public final class SaveBarController: ObservableObject {
     public struct Confirmation: Equatable, Sendable {
         public var message: String
         public var undoRecipeID: UUID?
+        public var canUndoPreset = false
     }
 
     public enum Phase: Equatable, Sendable {
@@ -44,6 +45,15 @@ public final class SaveBarController: ObservableObject {
     @Published public private(set) var phase: Phase = .idle
     @Published public private(set) var reminderRecipe: String?
     @Published public private(set) var served = false
+
+    @Published private var presetConfirmation: Confirmation?
+    private var undoPreset: (() -> Bool)?
+
+    public var confirmation: Confirmation? {
+        if let presetConfirmation { return presetConfirmation }
+        if case .saved(let saved) = phase { return saved }
+        return nil
+    }
 
     private var canRemind = false
     private var lastLive: [String: Data]?
@@ -120,18 +130,39 @@ public final class SaveBarController: ObservableObject {
         reset()
     }
 
+    public func showPresetUpdate(_ update: PresetLibrary.Update, in library: PresetLibrary) {
+        dismissConfirmation()
+        if case .saving = phase { reset() }
+        dismissReminder()
+        undoPreset = { [weak self, weak library] in
+            guard let self, let library else { return false }
+            return library.undo(update, recipes: self.store)
+        }
+        presetConfirmation = Confirmation(message: update.message, undoRecipeID: nil, canUndoPreset: true)
+        scheduleDismissal()
+    }
+
     public func undoSave() {
+        if let undoPreset {
+            _ = undoPreset()
+            dismissConfirmation()
+            return
+        }
         guard case .saved(let confirmation) = phase, let id = confirmation.undoRecipeID else { return }
         store.goBack(id)
         reset()
     }
 
     public func dismissConfirmation() {
-        if case .saved = phase { reset() }
+        if presetConfirmation != nil {
+            clearConfirmation()
+        } else if case .saved = phase {
+            reset()
+        }
     }
 
     public func hoverConfirmation(_ hovering: Bool) {
-        guard case .saved = phase else { return }
+        guard confirmation != nil else { return }
         if hovering, let deadline = confirmationDeadline {
             confirmationRemaining = max(0, deadline - now())
             cancelNext?()
@@ -162,13 +193,19 @@ public final class SaveBarController: ObservableObject {
         cancelNext = scheduler.schedule(after: confirmationRemaining) { [weak self] in self?.dismissConfirmation() }
     }
 
-    private func reset() {
+    private func clearConfirmation() {
         cancelNext?()
         cancelNext = nil
-        cancelServed?()
-        cancelServed = nil
         confirmationDeadline = nil
         confirmationRemaining = Self.confirmationDuration
+        if presetConfirmation != nil { presetConfirmation = nil }
+        undoPreset = nil
+    }
+
+    private func reset() {
+        clearConfirmation()
+        cancelServed?()
+        cancelServed = nil
         lastLive = nil
         canRemind = false
         if served { served = false }

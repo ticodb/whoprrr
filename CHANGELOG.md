@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- **One menu for presets** in Audio, Microphone, Windows, Keys and mouse, and Clipboard. It shows which preset is in use and whether you edited it. Update with one click or ⌘U. When the active recipe uses those settings, the same action saves the recipe and offers one Undo for both. Manage presets to rename them, or to hide or restore built-ins.
+
 ### Changed
 - **Quieter recipe saves**: the page title shows “Cookin’” and the recipe name while you make changes. Open it to save, make a new recipe, or put things back. Press ⌘S anywhere in the main window to save. A reminder appears when you leave a page, and “Not yet” keeps it away until the next change. The saved message offers Undo for four seconds and stays while you hover over it. The recipe menu still keeps the previous saved version.
 

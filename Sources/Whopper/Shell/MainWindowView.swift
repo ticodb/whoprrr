@@ -10,6 +10,7 @@ struct MainWindowView: View {
     @EnvironmentObject var nav: WindowNav
     @EnvironmentObject var recipes: RecipeStore
     @ObservedObject private var setup = SetupController.shared
+    @EnvironmentObject private var presetActions: PresetActions
     @ObservedObject private var license = LicenseController.shared
     @ObservedObject private var picklsss = PicklsssController.shared
 
@@ -53,6 +54,12 @@ struct MainWindowView: View {
         .sheet(item: Binding(get: { nav.windowOpen ? recipes.pendingSwitch : nil },
                              set: { if $0 == nil, recipes.pendingSwitch != nil { recipes.resolveSwitch(.stay) } })) { AutoSwitchSheet(pending: $0) }
         .sheet(item: $picklsss.sharing) { ShareFlowView(s: $0) }
+        .alert("Presets", isPresented: Binding(get: { presetActions.problem != nil },
+                                              set: { if !$0 { presetActions.problem = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(presetActions.problem ?? "")
+        }
         .onChange(of: features.enabled) { _, _ in
             if case .feature(let f) = nav.page, !features.isEnabled(f) { nav.page = .features }
         }
