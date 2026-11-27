@@ -2,6 +2,16 @@
 
 All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://semver.org); betas are labelled `0.9.0 beta N`.
 
+## 0.9.0 beta 7: guided setup, activate from your order page, Add a TV
+
+Released 2026-11-27.
+
+### Added
+- **Activate this Mac** on your order page hands Whoprrr a one-time setup code. The app can still activate with the key from your receipt.
+- **Add a TV** under Extras finds Android TVs on your network, verifies and installs Whoprrr TV, then opens it with a setup code from your order.
+- **Setup** takes this Mac from activation through a gear scan, recipe, permission guide and taste test in one window. It picks up where you left off and keeps the settings of any parked feature.
+- **After an update**, Whoprrr checks permissions quietly while your features keep running, and offers to renew only grants that clearly stopped working. The check never shows a macOS prompt or presses keys, and gives up after a few seconds. **Reset and ask again** clears a single supported grant for Whoprrr, only when you press it.
+
 ## 0.9.0 beta 6: the version in the menu-bar panel
 
 Released 2026-11-27.

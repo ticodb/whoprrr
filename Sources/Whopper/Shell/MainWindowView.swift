@@ -9,12 +9,12 @@ struct MainWindowView: View {
     @EnvironmentObject var input: InputController
     @EnvironmentObject var nav: WindowNav
     @EnvironmentObject var recipes: RecipeStore
-    @State private var missing = 0
+    @ObservedObject private var setup = SetupController.shared
     @ObservedObject private var license = LicenseController.shared
     @ObservedObject private var picklsss = PicklsssController.shared
 
     var body: some View {
-        if license.isLicensed { app } else { LicenseView() }
+        if license.isLicensed && !setup.showsSetup { app } else { SetupView() }
     }
 
     private var app: some View {
@@ -24,9 +24,18 @@ struct MainWindowView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        HandoverNotice()
                         StoveReminder()
                         NoticesBar()
-                        PageContent(page: nav.page)
+                        if case .feature(let feature) = nav.page, let finding = setup.progress.parked[feature] {
+                            BrandCard {
+                                Text(finding.detail).font(Brand.body)
+                                Button(setup.ordered(finding.grants).first.map { "Grant \($0.title)" } ?? "Continue setup") {
+                                    setup.continueParked([feature])
+                                }.buttonStyle(.brand)
+                            }
+                            PageContent(page: nav.page).disabled(true)
+                        } else { PageContent(page: nav.page) }
                     }
                     .padding(28)
                     .frame(maxWidth: 680, alignment: .topLeading)

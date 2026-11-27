@@ -8,6 +8,7 @@ struct ExtrasView: View {
     @ObservedObject private var license = LicenseController.shared
     @State private var key = ""
     @State private var enteringKey = false
+    @State private var addingTV = false
 
     private var pass: LicensePass? { license.currentPass }
 
@@ -39,6 +40,9 @@ struct ExtrasView: View {
                 HStack(spacing: 8) {
                     Button("Manage devices") { c.openPersonalPage() }.buttonStyle(.brandQuiet)
                     Button("I have a key") { enteringKey.toggle() }.buttonStyle(.brandQuiet)
+                    if pass?.tv == true {
+                        Button("Add a TV") { addingTV = true }.buttonStyle(.brand)
+                    }
                 }
                 if enteringKey { keyEntry }
             }
@@ -53,6 +57,7 @@ struct ExtrasView: View {
                     .font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
+        .sheet(isPresented: $addingTV) { AddTVView() }
         .task { await c.refreshMine() }
         .onAppear { c.refreshPassIfMissing() }
     }

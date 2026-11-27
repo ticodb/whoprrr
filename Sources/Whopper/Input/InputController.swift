@@ -143,29 +143,42 @@ final class InputController: ObservableObject {
 
     // MARK: Self test
 
-    /// Remaps F13 to F14 (keys no app uses), presses F13 for real and checks what comes out the other side.
+    /// Remaps a synthetic F13 to F14 and checks the real event tap output.
     func selfTest() {
-        guard runner.isRunning else { selfTestResult = "Remapping is not running yet. Grant the permissions above first."; return }
-        selfTestResult = "Testing…"
-        let before = settings
-        // Temporarily extend the live engine so the real tap handles the test key.
-        engine.setRules(before.rules + test_rules())
-        let counter = SeenCounter()
-        let watch = counter.start()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            for down in [true, false] { CGEvent(keyboardEventSource: nil, virtualKey: 105, keyDown: down)?.post(tap: .cghidEventTap) }
+        guard runner.isRunning, selfTestResult != "Testing…" else {
+            if !runner.isRunning { selfTestResult = "Remapping is not running yet. Grant the permissions above first." }
+            return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            guard let self else { return }
-            counter.stop(watch)
-            self.engine.setRules(before.rules)
-            if counter.f14 >= 1 && counter.f13 == 0 { self.selfTestResult = "Working: a test key was remapped by Whoprrr." }
-            else if counter.f13 >= 1 { self.selfTestResult = "Not remapping: the test key reached apps unchanged. Check Input Monitoring for Whoprrr." }
-            else { self.selfTestResult = "No key events were delivered. Grant Input Monitoring to Whoprrr in System Settings, then try again." }
+        selfTestResult = "Testing…"
+        Task {
+            let result = await verifyRemapping(on: runner, engine: engine, rules: settings.rules)
+            engine.setRules(settings.rules)
+            selfTestResult = result ? "Working: a test key was remapped by Whoprrr."
+                : "No remapped test key arrived. Check Input Monitoring and Accessibility in System Settings."
         }
     }
 
-    private func test_rules() -> [Rule] { [Rule(trigger: .key(105), tap: .chord(Chord(107)))] }
+    /// An isolated remap test that cannot load HID mappings, take over Logitech buttons or request a grant.
+    func verifyForSetup() async -> Bool {
+        guard CGPreflightListenEventAccess(), CGPreflightPostEventAccess(), AXIsProcessTrusted() else { return false }
+        let engine = RemapEngine()
+        let test = EventTapRunner(engine: engine, poster: EventPoster())
+        // Tap creation and its thread handshake happen off the main thread.
+        guard await Task.detached(operation: { test.start() }).value == .running else { test.stop(); return false }
+        defer { test.stop() }
+        return await verifyRemapping(on: test, engine: engine, rules: [])
+    }
+
+    private func verifyRemapping(on tap: EventTapRunner, engine: RemapEngine, rules: [Rule]) async -> Bool {
+        guard tap.isRunning, CGPreflightListenEventAccess(), CGPreflightPostEventAccess() else { return false }
+        let counter = SeenCounter()
+        guard let watch = counter.start() else { return false }
+        defer { counter.stop(watch) }
+        engine.setRules([Rule(trigger: .key(105), tap: .chord(Chord(107)))] + rules)
+        for down in [true, false] { CGEvent(keyboardEventSource: nil, virtualKey: 105, keyDown: down)?.post(tap: .cghidEventTap) }
+        try? await Task.sleep(for: .milliseconds(700))
+        return counter.f14 >= 1 && counter.f13 == 0
+    }
 
     // MARK: Editing helpers
 

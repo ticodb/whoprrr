@@ -140,7 +140,11 @@ final class SharedSetupTableDriftTests: XCTestCase {
 
     func testTheBandKindsAreTheAppsOwn() { XCTAssertEqual(T.bandKinds, BiquadCoefficients.Kind.allCases.map(\.rawValue)) }
 
-    func testThePermissionNamesAreTheAppsOwn() { XCTAssertEqual(T.permissions, Permission.allCases.map(\.rawValue)) }
+    /// Paste and the Whoprrr Mic driver are setup grants the shared-setup format doesn't carry. Any other new permission trips this.
+    func testThePermissionNamesAreTheAppsOwn() {
+        XCTAssertEqual(T.permissions + ["paste", "micDriver"], Permission.allCases.map(\.rawValue))
+        XCTAssertEqual(T.permissions, Permission.sharedSetupCases.map(\.rawValue))
+    }
 
     func testTheKeyboardLayoutNamesAreTheAppsOwn() { XCTAssertEqual(T.layouts, KeyboardLayout.allCases.map(\.rawValue)) }
 

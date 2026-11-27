@@ -45,6 +45,7 @@ final class TapChain {
     let muted: Bool
     let renders: Bool
     private(set) var inputPeak: Float = 0
+    private var outputPeak: Float = 0
     private(set) var callbacks = 0
     private var scratchL: UnsafeMutablePointer<Float>, scratchR: UnsafeMutablePointer<Float>
     private let capacity = 32768
@@ -140,6 +141,11 @@ final class TapChain {
         processor.process(left: scratchL, right: scratchR, frames: frames)
         rack.process(left: scratchL, right: scratchR, frames: frames)
         dynamics.process(left: scratchL, right: scratchR, frames: frames)
+        if pk > 0 {
+            var processed: Float = 0
+            for i in 0..<frames { processed = max(processed, abs(scratchL[i]), abs(scratchR[i])) }
+            if processed > outputPeak { outputPeak = processed }
+        }
 
         // Write L/R into the first two output channels; silence everywhere else.
         for (bi, b) in outs.enumerated() {
@@ -154,6 +160,8 @@ final class TapChain {
     }
 
     func takeInputPeak() -> Float { let p = inputPeak; inputPeak = 0; return p }
+
+    func takeOutputPeak() -> Float { let p = outputPeak; outputPeak = 0; return p }
 
     private func destroyDevices() {
         AudioHardwareDestroyAggregateDevice(aggregateID)
@@ -193,6 +201,7 @@ public final class OutputEQEngine: @unchecked Sendable {
     /// Called once real signal has been seen through the tap, proving the permission works.
     public var onPermissionVerified: (@Sendable () -> Void)?
     public var onLevel: (@Sendable (Float) -> Void)?
+    public var onProcessedLevel: (@Sendable (Float) -> Void)?
 
     public init(system: AudioSystem) { self.system = system }
 
@@ -261,6 +270,7 @@ public final class OutputEQEngine: @unchecked Sendable {
             guard let self, let c = self.chain else { return }
             let p = c.takeInputPeak()
             self.onLevel?(p)
+            self.onProcessedLevel?(c.takeOutputPeak())
             self.lock.lock(); let verified = self.settings.permissionVerified; self.lock.unlock()
             if !verified, p > 0.0003 {
                 self.lock.lock(); self.settings.permissionVerified = true; self.lock.unlock()

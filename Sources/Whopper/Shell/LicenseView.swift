@@ -4,24 +4,42 @@ import WhopperKit
 /// Shown in place of the app while this Mac has no valid pass. Plain words only: this is a key screen.
 struct LicenseView: View {
     @ObservedObject var license = LicenseController.shared
-    @EnvironmentObject var nav: WindowNav
     @State private var key = ""
+    @State private var enteringKey = false
     @FocusState private var focused: Bool
 
     var body: some View {
         VStack(spacing: 18) {
             LogoMark(size: 64)
-            switch license.state {
-            case .expiredOffline: offline
-            default: enterKey
-            }
+            if enteringKey || license.prefersManualKey { enterKey }
+            else if case .expiredOffline = license.state { offline }
+            else { orderPage }
         }
         .padding(40)
         .frame(maxWidth: 520)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .frame(minWidth: 860, minHeight: 620)
+        .onAppear { if !license.busy { license.resetManualKeyPreference() } }
+        .frame(maxWidth: .infinity)
         .tint(Brand.violetBright)
     }
+
+    private var orderPage: some View {
+        Group {
+            Text("One step left on this Mac").font(Brand.display(26, .semibold)).multilineTextAlignment(.center)
+            Text(license.busy ? "Activating this Mac…" : "Press Activate this Mac on your order page.")
+                .font(Brand.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            if let message = license.notice ?? message {
+                Text(message).font(Brand.callout).foregroundStyle(Brand.accentText).multilineTextAlignment(.center)
+            }
+            HStack {
+                Button("Open my order page", action: openOrderPage).buttonStyle(.brand)
+                Button("Type my key instead") { enteringKey = true }.buttonStyle(.brandPlain)
+            }.disabled(license.busy)
+            Text("One key works on 3 Macs. Activation needs the internet once.")
+                .font(Brand.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+        }
+    }
+
+    private func openOrderPage() { NSWorkspace.shared.open(PersonalPage.url(server: license.server)) }
 
     private var enterKey: some View {
         Group {
@@ -39,7 +57,7 @@ struct LicenseView: View {
             HStack(spacing: 8) {
                 Button(license.busy ? "Checking…" : "Activate this Mac", action: activate).buttonStyle(.brand)
                     .disabled(license.busy || key.trimmingCharacters(in: .whitespaces).isEmpty)
-                Button("Buy a key") { NSWorkspace.shared.open(URL(string: "https://whoprrr.app")!) }.buttonStyle(.brandQuiet)
+                Button("Open my order page", action: openOrderPage).buttonStyle(.brandPlain)
             }
             Text("One key works on 3 Macs. Activation needs the internet once; after that Whoprrr works offline.")
                 .font(Brand.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
@@ -62,11 +80,7 @@ struct LicenseView: View {
     private func activate() {
         Task {
             await license.activate(key: key)
-            guard license.isLicensed else { return }
-            key = ""
-            // A first activation leads into the gear scan, once.
-            let welcomed = "gg.tico.whoprrr.welcomed"
-            if !UserDefaults.standard.bool(forKey: welcomed) { UserDefaults.standard.set(true, forKey: welcomed); nav.page = .welcome }
+            if license.isLicensed { key = "" }
         }
     }
 }
@@ -82,7 +96,7 @@ struct LicenseQuickView: View {
                 Button("Try again") { Task { await license.renewIfDue(force: true) } }.buttonStyle(.brand)
             } else {
                 Text("This Mac is not activated yet.").font(Brand.body)
-                Button("Enter your key…") { Shared.showWindow() }.buttonStyle(.brand)
+                Button("Activate this Mac…") { Shared.showWindow() }.buttonStyle(.brand)
             }
             Divider()
             Button("Quit Whoprrr") { NSApp.terminate(nil) }.buttonStyle(.plain).font(Brand.caption).foregroundStyle(.secondary)
@@ -90,5 +104,22 @@ struct LicenseQuickView: View {
         .padding(16).frame(width: 320)
         .tint(Brand.violetBright)
         .background(Color(nsColor: .windowBackgroundColor).opacity(0.94))
+    }
+}
+
+struct HandoverNotice: View {
+    @ObservedObject private var license = LicenseController.shared
+
+    var body: some View {
+        if let message = license.handoverNotice {
+            BrandCard {
+                HStack {
+                    Label(message, systemImage: "checkmark.circle").font(Brand.body)
+                    Spacer()
+                    Button("Use a key instead") { license.showKeyEntry() }.buttonStyle(.brandQuiet)
+                    Button("Dismiss") { license.handoverNotice = nil }.buttonStyle(.brandPlain)
+                }
+            }
+        }
     }
 }

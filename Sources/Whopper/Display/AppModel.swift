@@ -65,8 +65,9 @@ final class AppModel: ObservableObject {
             Task { @MainActor in self?.snapshotChanged(snap); self?.probeDisplays(snap) }
         }.store(in: &bag)
         registry.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
-        registry.start()
     }
+
+    func startDevices() { registry.start() }
 
     var transportKind: TransportKind { controller.transport.kind }
     var displays: [DisplayDescriptor] { registry.displays }

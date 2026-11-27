@@ -42,7 +42,13 @@ enum Shared {
     /// The main window: sidebar of features and a page for each. When it is opened from the menu-bar drawer it appears right beside
     /// the drawer (top edges aligned); otherwise it comes back where you left it. While it is open Whoprrr shows in the Dock and
     /// ⌘-Tab, and goes back to menu-bar only when it closes.
-    static func showWindow(page: AppPage? = nil) {
+    /// `activate: false` puts the window on screen without taking focus from the app the person is typing in,
+    /// so no keystroke meant for another app can press a button here.
+    static var windowIsKey: Bool { window?.isKeyWindow == true && NSApp.isActive }
+
+    static func showWindow(page: AppPage? = nil, activate: Bool = true) {
+        SetupController.shared.refreshGrants()
+        SetupController.shared.reconcileSetupGrants()
         let drawer = drawerFrame()          // read before activating: activating can close the drawer
         let wasVisible = window?.isVisible == true
         if let page { nav.page = page }
@@ -68,8 +74,12 @@ enum Shared {
             let screen = NSScreen.screens.first { $0.frame.intersects(drawer) } ?? NSScreen.main ?? NSScreen.screens[0]
             w.setFrame(PanelPlacement.frame(beside: drawer, size: NSSize(width: 940, height: 700), visible: screen.visibleFrame), display: true)
         }
-        w.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        if activate {
+            w.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        } else {
+            w.orderFrontRegardless()
+        }
     }
 
     /// Makes every settings surface available to recipes, and switches recipes automatically when the connected gear changes.
@@ -82,12 +92,13 @@ enum Shared {
         PicklsssController.shared.start()
         gearTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { _ in
             MainActor.assumeIsolated {
+                guard LicenseController.shared.isLicensed, SetupController.shared.canAutoSwitch else { return }
                 let now = Gear.current()
                 let ids = now.map(\.id).sorted()
                 guard ids != lastGear else { return }
                 lastGear = ids
                 // Switches by itself when that loses nothing; with unsaved changes it asks first (the question shows in the main window).
-                if LicenseController.shared.isLicensed { recipes.considerAutoSwitch(connected: now) }
+                recipes.considerAutoSwitch(connected: now)
             }
         }
     }
@@ -117,12 +128,28 @@ enum Shared {
             + WindowAction.allCases.map { a in ("window.\(a.rawValue)", "Window: \(a.title)", { windows.run(a) }) }
         // Without a valid pass nothing runs in the background; features come back the moment one arrives, with no restart.
         let license = LicenseController.shared
-        features.$enabled.combineLatest(license.$state).sink { enabled, state in
-            let ok = license.skipped || state.isLicensed
-            audio.setActive(ok && (enabled.contains(.audio) || enabled.contains(.microphone)))
-            windows.setActive(ok && enabled.contains(.windows))
-            clipboard.setActive(ok && enabled.contains(.clipboard))
-            input.setActive(ok && enabled.contains(.remap))
+        let setup = SetupController.shared
+        features.$enabled.combineLatest(setup.$progress, license.$state).sink { enabled, progress, state in
+            let runtime = license.skipped || state.isLicensed ? SetupController.allowed(enabled, progress: progress) : []
+            audio.setActive(audio: runtime.contains(.audio), mic: runtime.contains(.microphone))
+            windows.setActive(runtime.contains(.windows))
+            clipboard.setActive(runtime.contains(.clipboard))
+            input.setActive(runtime.contains(.remap))
+        }.store(in: &bag)
+    }
+
+    static func startSetup() {
+        let license = LicenseController.shared
+        let setup = SetupController.shared
+        license.$state.map { license.skipped || $0.isLicensed }.removeDuplicates().sink { licensed in
+            guard licensed else { return }
+            // The publisher emits before the stored state changes.
+            Task { @MainActor in
+                guard license.isLicensed else { return }
+                model.startDevices()
+                audio.startDevices()
+                setup.beginLicensedLaunch()
+            }
         }.store(in: &bag)
     }
 }
@@ -131,6 +158,7 @@ enum Shared {
 final class MainWindowDelegate: NSObject, NSWindowDelegate {
     /// Closing the window asks nothing. The app keeps running, and anything unsaved stays live and is remembered as left on the stove.
     func windowWillClose(_ notification: Notification) {
+        SetupController.shared.windowClosed()
         Shared.nav.windowOpen = false
         Shared.recipes.noteLeaving()
         NSApp.setActivationPolicy(.accessory)
@@ -147,7 +175,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// A `.whoprrr-setup` file opened from Finder or dropped on the app. The checker runs every time; opening is free to look at.
     func application(_ application: NSApplication, open urls: [URL]) {
-        for u in urls where u.pathExtension == SharedSetupFile.fileExtension { PicklsssController.shared.openFile(u) }
+        for url in urls {
+            if url.scheme?.lowercased() == "whoprrr" {
+                // Any web page can open this scheme. A malformed link is ignored without showing anything.
+                guard let code = SetupCode.fromActivationURL(url) else { continue }
+                Shared.showWindow()
+                Task { await LicenseController.shared.activate(setupCode: code) }
+            } else if url.isFileURL, url.pathExtension == SharedSetupFile.fileExtension {
+                PicklsssController.shared.openFile(url)
+            }
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -160,6 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DemoData.seedAfterGearLoads()
         if let ap = ProcessInfo.processInfo.environment["WHOPPER_APPEARANCE"] { NSApp.appearance = NSAppearance(named: ap == "light" ? .aqua : .darkAqua) }
         if ProcessInfo.processInfo.environment["WHOPPER_NO_START"] != "1" { Shared.startFeatures() }
+        Shared.startSetup()
         LicenseController.shared.start()
         #if DEBUG
         // Debug only: open a file at launch, as if it had been double-clicked (scripts cannot drive Finder).
@@ -168,15 +206,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
         DebugDriver.startIfRequested()
         #endif
-        // First run: open the window on the gear scan, which proposes a starter recipe and then leads to Permissions.
-        // Without a valid pass the window opens on "Enter your key" instead, and the gear scan follows the activation.
-        let welcomed = "gg.tico.whoprrr.welcomed"
         if ProcessInfo.processInfo.environment["SDC_DEBUG_WINDOW"] != "1" {
-            if !LicenseController.shared.isLicensed {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { Shared.showWindow() }
-            } else if !UserDefaults.standard.bool(forKey: welcomed) {
-                UserDefaults.standard.set(true, forKey: welcomed)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { Shared.showWindow(page: .welcome) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                if SetupController.shared.showsSetup { Shared.showWindow() }
             }
         }
         // Development aid: SDC_DEBUG_WINDOW=1 shows a view in a normal window (WHOPPER_VIEW=quick for the menu-bar panel).

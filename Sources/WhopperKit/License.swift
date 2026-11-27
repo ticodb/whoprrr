@@ -112,6 +112,7 @@ public enum LicenseReplies {
     /// Fallback wording when the server sent a code without a message. Plain words: these are key screens.
     public static func fallback(_ code: String) -> String {
         switch code {
+        case "code_expired": "This setup link has expired. Open your order page for a new link, or type your key."
         case "invalid_key": "That key was not recognised. Check it and try again."
         case "not_owned": "This key does not include Whoprrr for Mac."
         case "disabled": "This key has been switched off. Write to hello@whoprrr.app."
@@ -126,6 +127,11 @@ public enum LicenseReplies {
         guard let status else { return .tryLater }
         let b = parse(body)
         if status == 200, let pass = b?.pass, !pass.isEmpty { return .activated(pass: pass, slot: b?.slot, of: b?.of) }
+        if status == 410 {
+            let code = "code_expired"
+            let message = b?.message.flatMap { $0.isEmpty ? nil : $0 } ?? fallback(code)
+            return .refused(code: code, message: message)
+        }
         if [400, 403, 404, 429].contains(status), let code = b?.error { return .refused(code: code, message: (b?.message).flatMap { $0.isEmpty ? nil : $0 } ?? fallback(code)) }
         return .tryLater
     }

@@ -51,8 +51,11 @@ struct ClipboardPanel: View {
 
     @ViewBuilder private var accessNote: some View {
         if !c.pasteboardAlwaysAllowed {
-            Text("macOS may ask permission each time Whoprrr reads what you copied. In System Settings > Privacy & Security > Paste from Other Apps, set Whoprrr to Always Allow.")
-                .font(Brand.caption2).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            BrandCard {
+                Text("macOS may ask each time Whoprrr reads what you copied. Choose Always Allow under Paste from Other Apps to stop the questions.")
+                    .font(Brand.caption).fixedSize(horizontal: false, vertical: true)
+                Button("Grant Paste from Other Apps") { SetupController.shared.guideGrant(.paste) }.buttonStyle(.brand)
+            }
         }
     }
 

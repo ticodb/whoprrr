@@ -21,6 +21,8 @@ final class LicenseController: ObservableObject {
     @Published private(set) var busy = false
     /// What to show under the key field after a failed try.
     @Published var notice: String?
+    @Published private(set) var prefersManualKey = false
+    @Published var handoverNotice: String?
     @Published private(set) var stored: Stored
 
     private let store = JSONStore<Stored>(name: "license")
@@ -125,10 +127,40 @@ final class LicenseController: ObservableObject {
 
     func activate(key: String) async {
         let typed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !typed.isEmpty, !busy else { return }
-        busy = true; notice = nil
+        guard !typed.isEmpty else { return }
+        await activate(using: "key", value: typed)
+    }
+
+    /// A code from a validated `whoprrr://activate` link. Any stored pass (valid, renewing or expired offline) wins:
+    /// a link never replaces this Mac's activation, so a code from another order can't take it over.
+    func activate(setupCode code: String) async {
+        while busy {
+            try? await Task.sleep(for: .milliseconds(150))
+            if Task.isCancelled { return }
+        }
+        if isLicensed || stored.pass != nil {
+            handoverNotice = "This Mac is already activated."
+            return
+        }
+        await activate(using: "setupCode", value: code)
+    }
+
+    /// From the hand-over notice: the key screen while not activated, otherwise Extras, which has "I have a key".
+    func showKeyEntry() {
+        handoverNotice = nil
+        if isLicensed { Shared.nav.page = .extras } else { prefersManualKey = true }
+        Shared.showWindow()
+    }
+
+    /// Each time the key screen opens it starts from the order-page view again.
+    func resetManualKeyPreference() { prefersManualKey = false }
+
+    private func activate(using field: String, value: String) async {
+        guard !busy else { return }
+        busy = true
+        notice = nil
         defer { busy = false }
-        let body: [String: Any] = ["key": typed, "deviceId": deviceId, "kind": "mac", "name": Host.current().localizedName ?? "Mac",
+        let body: [String: Any] = [field: value, "deviceId": deviceId, "kind": "mac", "name": Host.current().localizedName ?? "Mac",
                                    "model": Self.sysctl("hw.model"), "appVersion": AppInfo.version]
         let (status, data) = await post("api/activate", body)
         switch LicenseReplies.activate(status: status, body: data) {
@@ -140,11 +172,12 @@ final class LicenseController: ObservableObject {
             }
             save { $0.pass = pass; $0.slot = slot; $0.of = of; $0.lastRenewAttempt = nil }
             state = .licensed(p)
-        case .refused(_, let message):
+        case .refused(let code, let message):
             notice = message
+            if code == "code_expired" { prefersManualKey = true }
         case .tryLater:
             notice = status == nil ? "Could not reach whoprrr.app. Check your internet connection and try again."
-                                   : "The server could not check the key just now. Nothing is lost; try again in a few minutes."
+                                   : "The server could not activate this Mac just now. Try again in a few minutes."
         }
     }
 
@@ -182,6 +215,26 @@ final class LicenseController: ObservableObject {
         case .tryLater:
             break       // network trouble never costs anyone their pass
         }
+    }
+
+    /// Asks for a one-time TV setup code using this Mac's verified device pass.
+    func makeTVSetupCode() async throws -> String {
+        guard currentPass?.tv == true, let pass = await passForShelf() else {
+            throw TVInstallError.service("This Mac needs an active order that includes Whoprrr TV.")
+        }
+        var (status, data) = await post("api/setup-code", ["pass": pass])
+        if status == 401 {
+            await renewIfDue(force: true)
+            guard state.isLicensed, let fresh = stored.pass, fresh != pass else {
+                throw TVInstallError.service("Connect this Mac to the internet to refresh its activation.")
+            }
+            (status, data) = await post("api/setup-code", ["pass": fresh])
+        }
+        struct Reply: Decodable { var code: String?; var message: String? }
+        let reply = data.flatMap { try? JSONDecoder().decode(Reply.self, from: $0) }
+        if status == 200, let code = reply?.code.flatMap(SetupCode.normalize) { return code }
+        if let message = reply?.message, !message.isEmpty { throw TVInstallError.service(message) }
+        throw TVInstallError.noSetupCode
     }
 
     // MARK: Plumbing

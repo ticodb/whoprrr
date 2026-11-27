@@ -6,6 +6,8 @@ public enum StarterAction: Equatable, Sendable {
     case windowLayouts([String])
     /// Keep the external-display feature on.
     case displayControl
+    /// Apply the system equalizer to the current output.
+    case outputEQ
     /// Stop a Bluetooth speaker from powering off between sounds.
     case keepAwake(uid: String)
     /// Keep this device as the system microphone.
@@ -55,7 +57,7 @@ public struct StarterPlan: Equatable, Sendable {
 /// The rules that turn a gear scan into a proposed recipe. Each rule reads a trait of the gear (screen shape, connection type),
 /// never a specific model, so unknown gear still gets a sensible proposal.
 public enum StarterRecipes {
-    public static func plan(for scan: GearScan) -> StarterPlan {
+    public static func plan(for scan: GearScan, firstSetup: Bool = false) -> StarterPlan {
         var lines: [StarterLine] = []
         var off: [StarterPlan.Off] = []
         var gear: [GearNote] = []
@@ -122,6 +124,9 @@ public enum StarterRecipes {
             gear.append(GearNote(id: "audio.\(a.uid)", symbol: isMic ? "mic" : "speaker.wave.2", name: a.name,
                                  detail: "\(transportName(a.transport)) \(what)", fit: KnownGear.isTested(a.name) && !viaDisplay ? .tested : .untested))
         }
+        if firstSetup, scan.audio.contains(where: \.hasOutput) {
+            lines.append(.init(id: "audio.eq", feature: .audio, detail: "Equalizer for the current speakers", fit: .tested, on: true, action: .outputEQ))
+        }
         for a in external where a.transport == "bluetooth" && a.hasOutput && !a.hasInput {
             lines.append(StarterLine(id: "audio.keepAwake.\(a.uid)", feature: .audio, detail: "Keep \(a.name) awake so it does not power off between sounds",
                                      fit: KnownGear.isTested(a.name) ? .tested : .untested, on: true, action: .keepAwake(uid: a.uid)))
@@ -133,8 +138,9 @@ public enum StarterRecipes {
             let fit: Fit = KnownGear.isTested(m.name) ? .tested : .untested
             lines.append(StarterLine(id: "audio.pin", feature: .audio, detail: "Keep \(m.name) as the microphone in every app", fit: fit, on: true, action: .pinInput(uid: m.uid)))
             lines.append(StarterLine(id: "mic.source", feature: .microphone,
-                                     detail: "Use \(m.name) as the source for the Whoprrr Mic. Install the virtual mic on the Microphone page to add effects",
-                                     fit: fit, on: true, action: .micSource(uid: m.uid)))
+                                     detail: firstSetup ? "Use \(m.name) with the Whoprrr Mic"
+                                         : "Use \(m.name) as the source for the Whoprrr Mic. Install the virtual mic on the Microphone page to add effects",
+                                     fit: fit, on: !firstSetup, action: .micSource(uid: m.uid)))
         } else {
             off.append(.init(feature: .microphone, reason: "No external microphone found."))
             if let headset = external.first(where: { $0.transport == "bluetooth" && $0.hasInput && $0.hasOutput }),
@@ -158,7 +164,7 @@ public enum StarterRecipes {
                                  fit: .tested, on: false, action: .inputPreset("caps-hyper")))
 
         lines.append(StarterLine(id: "clipboard.history", feature: .clipboard, detail: "Clipboard history with search, pins and plain-text paste",
-                                 fit: .tested, on: true, action: .clipboard))
+                                 fit: .tested, on: !firstSetup, action: .clipboard))
 
         let desk = !externals.isEmpty || usbMic != nil
         return StarterPlan(name: desk ? "Desk" : "On the road", symbol: desk ? "house" : "laptopcomputer", gear: gear, lines: lines, off: off)

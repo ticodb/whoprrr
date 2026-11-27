@@ -10,7 +10,7 @@ The source is free under the MIT licence, and you can [build it yourself](buildi
 shasum -a 256 Whoprrr-<version>.zip
 ```
 
-The ready build asks for your key the first time it opens (it is in your receipt email and on your downloads page). It contacts whoprrr.app to activate, then again about once a week; see [PRIVACY.md](../PRIVACY.md). A release build you make yourself (`scripts/build-app.sh`) asks for a key too; only debug builds (`swift build`) skip the check, for development.
+The ready build activates from your order page. You can type the key from your receipt email instead. It contacts whoprrr.app to activate, then again about once a week; see [PRIVACY.md](../PRIVACY.md). A release build you make yourself (`scripts/build-app.sh`) asks for a key too; only debug builds (`swift build`) skip the check, for development.
 
 ## 2. First launch (beta builds are not notarized yet)
 
@@ -24,13 +24,15 @@ Or, in Terminal: `xattr -dr com.apple.quarantine /Applications/Whoprrr.app`
 
 You only need to do this once per downloaded version. If you would rather not run an unnotarized app, [build it yourself](building.md): it is a few commands.
 
-Whoprrr lives in the menu bar (no Dock icon unless its window is open). The first time, it opens its window on **Permissions**.
+Whoprrr lives in the menu bar (no Dock icon unless its window is open). On first launch it opens Setup.
 
-## 3. Grant permissions
+## 3. Set up this Mac
 
-Turn on only the features you use; each asks only for what it needs. [What each permission is for →](permissions.md)
+On your order page, press **Activate this Mac**. The link opens Whoprrr and activates this Mac. If the link expires, get a fresh one from the order page or choose **Type my key instead**. Then choose **Scan my setup** to review a recipe for the gear connected to this Mac. The recipe lists the grants its switched-on lines need. **Set up by hand** goes straight to Features.
 
-Because beta builds are ad-hoc signed, macOS treats every new version as a new app and asks again. If a permission looks granted but does nothing after an update, switch it off and on again in System Settings, or run `tccutil reset All gg.tico.whopper` and grant again.
+Setup remembers where you stopped. Follow the guide for each grant, then try the features in **Taste test**. If you skip a grant, its features stay off with their settings saved. The menu bar offers **Continue** when you’re ready. [What each grant is for](permissions.md)
+
+On the first launch of a new build, Whoprrr checks quietly while your features run. It opens a renewal window only if a grant clearly stopped working, and pauses only the features that need it.
 
 ## 4. Optional: the virtual microphone
 
@@ -42,6 +44,12 @@ Because beta builds are ad-hoc signed, macOS treats every new version as a new a
 - **Settings…** (⌘,) for everything else.
 - Make a **Recipe** once your setup is the way you like it.
 - **⌃⌥⇧⌘⎋** pauses all key and mouse rules if anything feels wrong.
+
+## Add a TV
+
+If your order includes Whoprrr TV, open **Extras → Add a TV**. Keep the Mac and the Android TV on the same network. If your TV shows **Needs one setting**, follow the steps for turning on USB debugging. You can also enter the TV’s address from **Settings → Network**.
+
+Choose **Install** on the TV you want. If this Mac has no `adb`, Whoprrr downloads Google’s Android SDK Platform-Tools on the first install and runs Google’s `adb` tool from its Application Support folder. It checks the download against the size and checksum in Google’s repository manifest, and checks that `adb` is signed by Google, before running it. On the TV, choose **Always allow from this computer**, then **Allow**. The Mac checks the APK, installs it and opens Whoprrr TV with a short-lived setup code from your order. Finish setup on the TV.
 
 ## Uninstall
 
