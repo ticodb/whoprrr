@@ -224,7 +224,19 @@ public final class OutputEQEngine: @unchecked Sendable {
     public func apply(_ s: OutputEQSettings, mix: MixSettings = MixSettings()) {
         lock.lock(); settings = s; self.mix = mix; lock.unlock()
         if s.enabled { observeIfNeeded() }
-        work.async { [weak self] in self?.reconcile() }
+        work.async { [weak self] in
+            guard let self else { return }
+            self.lock.lock(); let (settings, mix) = (self.settings, self.mix); self.lock.unlock()
+            // A fader gesture only changes atomic gain targets. Device discovery and tap
+            // rebuilding belong to output/process notifications, not each slider tick.
+            if settings.enabled, self.appliedSettings == settings, let chain = self.chain,
+               self.fadeDeadline == nil, !chain.layoutFailed,
+               self.appliedPlan == MixTapPlan(mix: mix, live: settings.permissionVerified ? self.liveApps : []) {
+                chain.updateGains(mix)
+            } else {
+                self.reconcile()
+            }
+        }
     }
 
     public func stop() {

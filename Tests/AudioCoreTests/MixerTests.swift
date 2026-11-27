@@ -95,7 +95,7 @@ final class MixerTests: XCTestCase {
         XCTAssertEqual(MixTapPlan(mix: mix, live: groups).apps.first?.processes, [102, 103])
     }
 
-    func testTapPlanFollowsAdjustedLiveProcessesAndKeepsFailedAppsInGlobalTap() {
+    func testTapPlanFollowsHeardAndAdjustedProcessesAndKeepsFailedAppsInGlobalTap() {
         var mix = MixSettings()
         for id in ["a", "b", "closed"] { mix.set(id, volume: 0.5, muted: false, name: id) }
         let live = [
@@ -103,15 +103,54 @@ final class MixerTests: XCTestCase {
             MixApp(id: "b", name: "B", isPlaying: true, processIDs: [30]),
             MixApp(id: "a", name: "A", isPlaying: false, processIDs: [20, 10]),
         ]
-        XCTAssertTrue(MixTapPlan(mix: MixSettings(), live: live).apps.isEmpty)
+        XCTAssertEqual(MixTapPlan(mix: MixSettings(), live: live).apps.map(\.id), ["b", "new"])
         let plan = MixTapPlan(mix: mix, live: live)
-        XCTAssertEqual(plan.apps.map(\.id), ["a", "b"])
+        XCTAssertEqual(plan.apps.map(\.id), ["a", "b", "new"])
         let resolved = plan.resolve(own: [1]) { $0.id == "a" ? $0.processes : nil }
         XCTAssertEqual(resolved.taps, [[10, 20]])
         XCTAssertEqual(resolved.ids, ["a"])
         XCTAssertEqual(resolved.exclusions, [1, 10, 20])
-        XCTAssertEqual(resolved.failed, ["b"])
+        XCTAssertEqual(resolved.failed, ["b", "new"])
         XCTAssertNotEqual(plan, MixTapPlan(mix: mix, live: Array(live.dropLast())))
+    }
+
+    func testDormantAudioClientsStayHiddenAndHeardAppsSurvivePauses() throws {
+        var history = MixPlaybackHistory()
+        func app(_ id: String, playing: Bool = false) -> MixApp {
+            MixApp(id: id, name: id, isPlaying: playing, processIDs: [UInt32(id == "music" ? 1 : 2)])
+        }
+        let idle = history.update([app("music"), app("mail")])
+        XCTAssertTrue(idle.filter(\.hasPlayedAudio).isEmpty)
+        XCTAssertTrue(MixTapPlan(mix: MixSettings(), live: idle).apps.isEmpty)
+
+        let playing = history.update([app("music", playing: true), app("mail")])
+        XCTAssertEqual(playing.filter(\.hasPlayedAudio).map(\.id), ["music"])
+        let paused = history.update([app("music"), app("mail")])
+        XCTAssertEqual(paused.filter(\.hasPlayedAudio).map(\.id), ["music"])
+        XCTAssertEqual(MixTapPlan(mix: MixSettings(), live: playing), MixTapPlan(mix: MixSettings(), live: paused))
+
+        _ = history.update([app("mail")]) // Quitting removes session playback history.
+        let relaunched = history.update([app("music"), app("mail")])
+        XCTAssertTrue(relaunched.filter(\.hasPlayedAudio).isEmpty)
+    }
+
+    func testFaderMuteAndResetKeepTheSameTapRoute() throws {
+        var history = MixPlaybackHistory()
+        let live = history.update([MixApp(id: "browser", name: "Browser", isPlaying: true, processIDs: [12, 11])])
+        let original = MixTapPlan(mix: MixSettings(), live: live)
+        XCTAssertEqual(original.apps.first?.processes, [11, 12])
+        var mix = MixSettings()
+        for volume in [0.99, 0.5, 0, 0.8, 1] {
+            mix.set("browser", volume: volume, muted: false, name: "Browser")
+            XCTAssertEqual(MixTapPlan(mix: mix, live: live), original)
+        }
+        mix.set("browser", volume: 1, muted: true, name: "Browser")
+        XCTAssertEqual(MixTapPlan(mix: mix, live: live), original)
+        mix = MixSettings()
+        let paused = history.update([MixApp(id: "browser", name: "Browser", isPlaying: false, processIDs: [11, 12])])
+        XCTAssertEqual(MixTapPlan(mix: mix, live: paused), original)
+        let replaced = history.update([MixApp(id: "browser", name: "Browser", isPlaying: true, processIDs: [13])])
+        XCTAssertNotEqual(MixTapPlan(mix: mix, live: replaced), original)
     }
 
     func testLinearGainRampRetargetsFromTheCurrentSample() {

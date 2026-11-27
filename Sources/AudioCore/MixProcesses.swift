@@ -8,13 +8,16 @@ public struct MixApp: Identifiable, Equatable, Sendable {
     public let name: String
     public let bundleURL: URL?
     public let isPlaying: Bool
+    /// Remains true after playback pauses, until the app quits or monitoring stops.
+    public let hasPlayedAudio: Bool
     public let processIDs: [UInt32]
 
-    public init(id: String, name: String, bundleURL: URL? = nil, isPlaying: Bool, processIDs: [UInt32] = []) {
+    public init(id: String, name: String, bundleURL: URL? = nil, isPlaying: Bool, processIDs: [UInt32] = [], hasPlayedAudio: Bool = false) {
         self.id = id
         self.name = name
         self.bundleURL = bundleURL
         self.isPlaying = isPlaying
+        self.hasPlayedAudio = hasPlayedAudio || isPlaying
         self.processIDs = processIDs
     }
 }
@@ -68,6 +71,21 @@ func groupMixProcesses(_ processes: [MixProcess], apps: [MixRunningApp], ownPID:
     return groups.values.sorted { $0.id < $1.id }
 }
 
+/// HAL registers dormant audio clients too. Only actual output earns a mixer row. Keep
+/// that row (and its tap) through pauses, so adjusting or resetting a fader never reroutes it.
+struct MixPlaybackHistory {
+    private var heard = Set<String>()
+
+    mutating func update(_ apps: [MixApp]) -> [MixApp] {
+        heard.formIntersection(apps.map(\.id))
+        heard.formUnion(apps.filter(\.isPlaying).map(\.id))
+        return apps.map {
+            MixApp(id: $0.id, name: $0.name, bundleURL: $0.bundleURL, isPlaying: $0.isPlaying,
+                   processIDs: $0.processIDs, hasPlayedAudio: heard.contains($0.id))
+        }
+    }
+}
+
 struct MixTapPlan: Equatable {
     struct App: Equatable {
         let id: String
@@ -76,7 +94,7 @@ struct MixTapPlan: Equatable {
     let apps: [App]
 
     init(mix: MixSettings, live: [MixApp]) {
-        apps = live.filter { mix.apps[$0.id] != nil && !$0.processIDs.isEmpty }
+        apps = live.filter { ($0.hasPlayedAudio || mix.apps[$0.id] != nil) && !$0.processIDs.isEmpty }
             .map { App(id: $0.id, processes: $0.processIDs.sorted()) }
             .sorted { $0.id < $1.id }
     }
@@ -103,6 +121,7 @@ final class MixProcessMonitor: @unchecked Sendable {
     private var observedIDs = Set<AudioObjectID>()
     private var applications: [NSObjectProtocol] = []
     private var last: [MixApp]?
+    private var playback = MixPlaybackHistory()
     private var listening = true
     private var poller: DispatchSourceTimer?
     private lazy var listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.refresh() }
@@ -156,7 +175,7 @@ final class MixProcessMonitor: @unchecked Sendable {
             return MixProcess(objectID: id, pid: pid, bundleID: bundleID ?? app?.bundleIdentifier,
                               ancestors: parents, isPlaying: playing, name: app?.localizedName, bundleURL: app?.bundleURL)
         }
-        let current = groupMixProcesses(processes, apps: apps, ownPID: getpid())
+        let current = playback.update(groupMixProcesses(processes, apps: apps, ownPID: getpid()))
         if current != last { last = current; changed(current) }
     }
 

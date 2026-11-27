@@ -16,6 +16,7 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 - Permission renewal can clear a failed grant before asking again, with the current app available to add manually in System Settings.
 
 ### Fixed
+- The mixer hides dormant audio clients and keeps heard apps available through pauses. Fader changes, mute, and reset reuse the audio route instead of rebuilding it.
 - Snap previews update only when their position changes and skip Whoprrr’s own windows.
 
 ### Changed
