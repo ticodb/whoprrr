@@ -1,5 +1,6 @@
 #!/bin/zsh
-# Adds the current release to the Sparkle appcast and stages the zip next to it. It does NOT deploy.
+# Adds the current release to the Sparkle appcast, stages the zip next to it and records it (with its SHA-256) in
+# site/releases.json. It does NOT deploy.
 #
 #   scripts/release.sh                 # builds dist/Whoprrr-<tag>.zip (same VERSION / RELEASE_LABEL)
 #   scripts/publish-mac-update.sh      # signs the zip, writes the appcast item, copies the zip
@@ -12,7 +13,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 VERSION="$(cat VERSION)"
-LABEL="${RELEASE_LABEL-beta 6}"
+LABEL="${RELEASE_LABEL-beta 7}"
 TAG="${VERSION}${LABEL:+-${LABEL// /}}"
 UPDATES_DIR="${UPDATES_DIR:-$HOME/whoprrr-updates}"
 # The site folder can have unreleased site work checked out. This script writes into it and the next step deploys it,
@@ -49,6 +50,22 @@ LENGTH="$(sed -n 's/.*length="\([^"]*\)".*/\1/p' <<<"$SIG_LINE")"
 
 ZIPNAME="Whoprrr-${TAG}.zip"
 cp "$ZIP" "$UPDATES_DIR/mac/$ZIPNAME"
+
+# The site refuses to build unless site/releases.json names this zip with its SHA-256. Hash the copy that will be served.
+RELEASES="$UPDATES_DIR/site/releases.json"
+[[ -f "$RELEASES" ]] || { echo "Missing $RELEASES (set UPDATES_DIR)." >&2; exit 1; }
+ZIPSHA="$(shasum -a 256 "$UPDATES_DIR/mac/$ZIPNAME" | awk '{print $1}')"
+python3 - "$RELEASES" "${VERSION}${LABEL:+ $LABEL}" "$ZIPNAME" "$ZIPSHA" <<'PY'
+import json, sys
+path, version, name, sha = sys.argv[1:]
+with open(path, encoding="utf-8") as f:
+    data = json.load(f)
+mac = data.setdefault("mac", {})
+mac["version"], mac["file"], mac["sha256"] = version, name, sha
+# Same layout as the file already uses: 2-space indent, UTF-8, trailing newline. Other keys (notes included) are untouched.
+with open(path, "w", encoding="utf-8") as f:
+    f.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+PY
 
 python3 - "$UPDATES_DIR/mac/appcast.xml" "$BASE_URL" "$ZIPNAME" "$BUILD" "$SHORT" "$MINOS" "$ED_SIG" "$LENGTH" "$VERSION" "$LABEL" "$TAG" <<'PY'
 import sys, re, html, email.utils
@@ -104,6 +121,7 @@ PY
 xmllint --noout "$UPDATES_DIR/mac/appcast.xml"
 echo
 echo "Staged update $TAG (build $BUILD) in $UPDATES_DIR/mac:  $ZIPNAME, appcast.xml"
+echo "site/releases.json: mac.version \"${VERSION}${LABEL:+ $LABEL}\", mac.file $ZIPNAME, mac.sha256 $ZIPSHA"
 echo "Public key in this build: $PUBKEY"
 echo "Nothing is live yet. To publish, run:"
 echo "  cd $UPDATES_DIR && vercel deploy --prod"
