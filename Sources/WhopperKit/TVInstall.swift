@@ -103,6 +103,7 @@ public struct TVRelease: Decodable, Equatable, Sendable {
     public let size: Int?
 
     public var filename: String { url.lastPathComponent }
+    public static let maxSize = 262_144_000
 
     public func validate(for site: URL) throws {
         let file = filename.utf8
@@ -253,5 +254,95 @@ public struct TVInstaller {
 
     private func run(_ address: TVAddress, _ args: [String], timeout: TimeInterval) async throws -> TVCommandOutput {
         try await process.run(adb, arguments: ["-s", address.serial] + args, timeout: timeout)
+    }
+}
+
+/// Google's SDK repository manifest (repository2-3.xml) lists each platform-tools archive with its size and SHA-1.
+/// The macOS archive is pinned to that entry before anything in it runs.
+public struct PlatformToolsArchive: Equatable, Sendable {
+    public static let repository = URL(string: "https://dl.google.com/android/repository/")!
+    public static let manifest = URL(string: "https://dl.google.com/android/repository/repository2-3.xml")!
+    /// Google LLC's Developer ID team. The extracted adb must carry this signature.
+    public static let codeRequirement = #"anchor apple generic and certificate leaf[subject.OU] = "EQHXZ8M8AV""#
+    public static let maxSize = 104_857_600
+
+    public let file: String
+    public let size: Int
+    public let sha1: String
+
+    public var url: URL { Self.repository.appendingPathComponent(file) }
+
+    public init?(file: String, size: Int, sha1: String) {
+        let name = file.utf8
+        let digest = sha1.lowercased()
+        guard file.hasPrefix("platform-tools_r"), file.hasSuffix("-darwin.zip"), name.count < 80,
+              name.allSatisfy({ (48...57).contains($0) || (97...122).contains($0) || $0 == 45 || $0 == 46 || $0 == 95 }),
+              (1...Self.maxSize).contains(size),
+              digest.utf8.count == 40, digest.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else { return nil }
+        self.file = file
+        self.size = size
+        self.sha1 = digest
+    }
+
+    /// The macOS archive of the `platform-tools` package, or nil when the manifest has none that passes the checks.
+    public static func fromManifest(_ data: Data) -> PlatformToolsArchive? {
+        let reader = ManifestReader()
+        let parser = XMLParser(data: data)
+        parser.shouldResolveExternalEntities = false
+        parser.delegate = reader
+        guard parser.parse() else { return nil }
+        return reader.found
+    }
+
+    public func verify(_ file: URL) throws {
+        let input = try FileHandle(forReadingFrom: file)
+        defer { try? input.close() }
+        var hash = Insecure.SHA1()
+        var count = 0
+        while let bytes = try input.read(upToCount: 1_048_576), !bytes.isEmpty {
+            try Task.checkCancellation()
+            count += bytes.count
+            guard count <= size else { throw TVInstallError.tools }
+            hash.update(data: bytes)
+        }
+        let actual = hash.finalize().map { String(format: "%02x", $0) }.joined()
+        guard count == size, actual == sha1 else { throw TVInstallError.tools }
+    }
+}
+
+private final class ManifestReader: NSObject, XMLParserDelegate {
+    var found: PlatformToolsArchive?
+    private var inPackage = false
+    private var path: [String] = []
+    private var text = ""
+    private var size: Int?, sha1: String?, file: String?, host: String?
+
+    func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes: [String: String] = [:]) {
+        path.append(name)
+        text = ""
+        if name == "remotePackage" { inPackage = attributes["path"] == "platform-tools" }
+        if inPackage && name == "archive" { size = nil; sha1 = nil; file = nil; host = nil }
+        if inPackage && name == "checksum" && attributes["type"] != "sha1" { sha1 = "" }
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) { text += string }
+
+    func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
+        defer { path.removeLast(); text = "" }
+        guard inPackage else { return }
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let inComplete = path.dropLast().last == "complete"
+        switch name {
+        case "size" where inComplete: size = Int(value)
+        case "checksum" where inComplete: if sha1 == nil { sha1 = value } else { sha1 = nil }
+        case "url" where inComplete: file = value
+        case "host-os": host = value
+        case "archive":
+            if found == nil, host == "macosx", let file, let size, let sha1 {
+                found = PlatformToolsArchive(file: file, size: size, sha1: sha1)
+            }
+        case "remotePackage": inPackage = false
+        default: break
+        }
     }
 }

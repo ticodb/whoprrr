@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import Security
 import WhopperKit
 
 /// Runs only the selected executable with separated arguments, with bounded output and a deadline.
@@ -91,10 +92,10 @@ private final class RunningTVCommand: @unchecked Sendable {
 }
 
 enum TVPlatformTools {
-    private static let googleZIP = URL(string: "https://dl.google.com/android/repository/platform-tools-latest-darwin.zip")!
     private static var directory: URL { JSONStore<SetupProgress>.directory().appendingPathComponent("TV", isDirectory: true) }
-    private static var cached: URL { directory.appendingPathComponent("platform-tools/adb") }
+    static var cached: URL { directory.appendingPathComponent("platform-tools/adb") }
 
+    /// adb the person already has (PATH, SDK, Homebrew), else Whoprrr's private copy if it still carries Google's signature.
     static func installedADB() -> URL? {
         let env = ProcessInfo.processInfo.environment
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -103,33 +104,55 @@ enum TVPlatformTools {
         let common = [home.appendingPathComponent("Library/Android/sdk/platform-tools/adb").path,
                       home.appendingPathComponent("Android/Sdk/platform-tools/adb").path,
                       "/opt/homebrew/bin/adb", "/usr/local/bin/adb", "/opt/local/bin/adb"]
-        return (path + sdk + common + [cached.path]).first(where: FileManager.default.isExecutableFile(atPath:))
-            .map { URL(fileURLWithPath: $0) }
+        if let local = (path + sdk + common).first(where: FileManager.default.isExecutableFile(atPath:)) { return URL(fileURLWithPath: local) }
+        return FileManager.default.isExecutableFile(atPath: cached.path) && signedByGoogle(cached) ? cached : nil
     }
 
+    /// The Developer ID signature of Google LLC, checked with the Security framework.
+    static func signedByGoogle(_ file: URL) -> Bool {
+        var code: SecStaticCode?
+        var requirement: SecRequirement?
+        guard SecStaticCodeCreateWithPath(file as CFURL, [], &code) == errSecSuccess, let code,
+              SecRequirementCreateWithString(PlatformToolsArchive.codeRequirement as CFString, [], &requirement) == errSecSuccess,
+              let requirement else { return false }
+        return SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSStrictValidate), requirement) == errSecSuccess
+    }
+
+    /// Downloads Google's macOS platform-tools, pinned to the size and SHA-1 in Google's repository manifest, and keeps
+    /// adb only if it carries Google's Developer ID signature.
     static func getADB(using process: any TVProcessRunning) async throws -> URL {
         if let local = installedADB() { return local }
         let fm = FileManager.default
+        let (listing, listed) = try await URLSession.shared.data(for: URLRequest(url: PlatformToolsArchive.manifest, timeoutInterval: 30))
+        guard (listed as? HTTPURLResponse)?.statusCode == 200, listed.url?.host == "dl.google.com",
+              let archive = PlatformToolsArchive.fromManifest(listing) else { throw TVInstallError.tools }
+        try Task.checkCancellation()
         let staging = directory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try fm.createDirectory(at: staging, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer { try? fm.removeItem(at: staging) }
-        let (download, response) = try await URLSession.shared.download(from: googleZIP)
+        let (download, response) = try await URLSession.shared.download(for: URLRequest(url: archive.url, timeoutInterval: 120))
         defer { try? fm.removeItem(at: download) }
         guard (response as? HTTPURLResponse)?.statusCode == 200, response.url?.scheme == "https",
               response.url?.host == "dl.google.com" else { throw TVInstallError.tools }
+        try await Task.detached { try archive.verify(download) }.value
         try Task.checkCancellation()
         let output = try await process.run(URL(fileURLWithPath: "/usr/bin/ditto"),
                                            arguments: ["-x", "-k", download.path, staging.path], timeout: 30)
         let extracted = staging.appendingPathComponent("platform-tools", isDirectory: true)
-        guard output.status == 0, fm.isExecutableFile(atPath: extracted.appendingPathComponent("adb").path) else {
-            throw TVInstallError.tools
-        }
+        let adb = extracted.appendingPathComponent("adb")
+        guard output.status == 0, fm.isExecutableFile(atPath: adb.path), signedByGoogle(adb) else { throw TVInstallError.tools }
         try Task.checkCancellation()
         let destination = cached.deletingLastPathComponent()
+        if fm.fileExists(atPath: destination.path) { try? fm.removeItem(at: destination) }
         do { try fm.moveItem(at: extracted, to: destination) }
-        catch {
-            if !fm.isExecutableFile(atPath: cached.path) { throw TVInstallError.tools }
-        }
+        catch { throw TVInstallError.tools }
         return cached
+    }
+
+    /// Stops the adb server of Whoprrr's private copy. A copy the person installed is left alone.
+    static func stopPrivateServer(using process: any TVProcessRunning) {
+        guard FileManager.default.isExecutableFile(atPath: cached.path) else { return }
+        let adb = cached
+        Task.detached { _ = try? await process.run(adb, arguments: ["kill-server"], timeout: 5) }
     }
 }

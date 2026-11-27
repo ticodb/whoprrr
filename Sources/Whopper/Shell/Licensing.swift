@@ -131,22 +131,29 @@ final class LicenseController: ObservableObject {
         await activate(using: "key", value: typed)
     }
 
-    func activate(from url: URL) async {
+    /// A code from a validated `whoprrr://activate` link. Any stored pass (valid, renewing or expired offline) wins:
+    /// a link never replaces this Mac's activation, so a code from another order can't take it over.
+    func activate(setupCode code: String) async {
         while busy {
             try? await Task.sleep(for: .milliseconds(150))
             if Task.isCancelled { return }
         }
-        if isLicensed {
+        if isLicensed || stored.pass != nil {
             handoverNotice = "This Mac is already activated."
-            return
-        }
-        guard let code = SetupCode.fromActivationURL(url) else {
-            notice = "This setup link could not be read. Open your order page or type your key."
-            prefersManualKey = true
             return
         }
         await activate(using: "setupCode", value: code)
     }
+
+    /// From the hand-over notice: the key screen while not activated, otherwise Extras, which has "I have a key".
+    func showKeyEntry() {
+        handoverNotice = nil
+        if isLicensed { Shared.nav.page = .extras } else { prefersManualKey = true }
+        Shared.showWindow()
+    }
+
+    /// Each time the key screen opens it starts from the order-page view again.
+    func resetManualKeyPreference() { prefersManualKey = false }
 
     private func activate(using field: String, value: String) async {
         guard !busy else { return }

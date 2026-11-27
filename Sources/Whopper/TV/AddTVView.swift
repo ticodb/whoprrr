@@ -23,6 +23,7 @@ private final class AddTVModel: ObservableObject {
     private var discovery: Task<Void, Never>?
     private var connection: Task<Void, Never>?
     private var manual: TVAnnouncement?
+    private var executable: URL?
 
     var isInstalling: Bool {
         if case .sending(let step) = stage {
@@ -53,6 +54,7 @@ private final class AddTVModel: ObservableObject {
         browser.stop()
         connection?.cancel()
         connection = nil
+        if executable == TVPlatformTools.cached { TVPlatformTools.stopPrivateServer(using: process) }
     }
 
     private func refresh() async {
@@ -99,6 +101,7 @@ private final class AddTVModel: ObservableObject {
             do {
                 if needsTools { stage = .gettingTools }
                 let executable = try await TVPlatformTools.getADB(using: process)
+                self.executable = executable
                 try Task.checkCancellation()
                 needsTools = false
                 let installer = TVInstaller(adb: executable, process: process, network: TVDownloads(license: .shared))
@@ -227,7 +230,7 @@ struct AddTVView: View {
             }
             manualAddress
             if model.needsTools {
-                Text("The first install downloads Google’s Android SDK Platform-Tools into Whoprrr’s Application Support folder.")
+                Text("The first install downloads Google’s Android SDK Platform-Tools into Whoprrr’s Application Support folder and runs Google’s adb tool from there. Whoprrr checks the download against Google’s published checksum and Google’s signature first.")
                     .font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Link("Google’s SDK terms", destination: URL(string: "https://developer.android.com/tools/releases/platform-tools")!)
                     .font(Brand.caption)

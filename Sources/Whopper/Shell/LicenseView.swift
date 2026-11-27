@@ -17,6 +17,7 @@ struct LicenseView: View {
         }
         .padding(40)
         .frame(maxWidth: 520)
+        .onAppear { if !license.busy { license.resetManualKeyPreference() } }
         .frame(maxWidth: .infinity)
         .tint(Brand.violetBright)
     }
@@ -115,6 +116,7 @@ struct HandoverNotice: View {
                 HStack {
                     Label(message, systemImage: "checkmark.circle").font(Brand.body)
                     Spacer()
+                    Button("Use a key instead") { license.showKeyEntry() }.buttonStyle(.brandQuiet)
                     Button("Dismiss") { license.handoverNotice = nil }.buttonStyle(.brandPlain)
                 }
             }

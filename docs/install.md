@@ -49,7 +49,7 @@ On the first launch of a new build, Whoprrr checks quietly while your features r
 
 If your order includes Whoprrr TV, open **Extras → Add a TV**. Keep the Mac and the Android TV on the same network. If your TV shows **Needs one setting**, follow the steps for turning on USB debugging. You can also enter the TV’s address from **Settings → Network**.
 
-Choose **Install** on the TV you want. If this Mac has no `adb`, Whoprrr downloads Google’s Android SDK Platform-Tools on the first install. On the TV, choose **Always allow from this computer**, then **Allow**. The Mac checks the APK, installs it and opens Whoprrr TV with a short-lived setup code from your order. Finish setup on the TV.
+Choose **Install** on the TV you want. If this Mac has no `adb`, Whoprrr downloads Google’s Android SDK Platform-Tools on the first install and runs Google’s `adb` tool from its Application Support folder. It checks the download against the size and checksum in Google’s repository manifest, and checks that `adb` is signed by Google, before running it. On the TV, choose **Always allow from this computer**, then **Allow**. The Mac checks the APK, installs it and opens Whoprrr TV with a short-lived setup code from your order. Finish setup on the TV.
 
 ## Uninstall
 

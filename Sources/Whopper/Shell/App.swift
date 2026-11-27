@@ -169,8 +169,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
             if url.scheme?.lowercased() == "whoprrr" {
+                // Any web page can open this scheme. A malformed link is ignored without showing anything.
+                guard let code = SetupCode.fromActivationURL(url) else { continue }
                 Shared.showWindow()
-                Task { await LicenseController.shared.activate(from: url) }
+                Task { await LicenseController.shared.activate(setupCode: code) }
             } else if url.isFileURL, url.pathExtension == SharedSetupFile.fileExtension {
                 PicklsssController.shared.openFile(url)
             }

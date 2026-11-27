@@ -120,6 +120,36 @@ final class TVInstallTests: XCTestCase {
         XCTAssertThrowsError(try release(url: "https://whoprrr.app/tv/whoprrr-tv-1.2.1.zip").validate(for: site))
     }
 
+    func testPlatformToolsArchiveIsPinnedToGooglesManifest() throws {
+        let zip = Data("platform tools fixture".utf8)
+        let sha1 = Insecure.SHA1.hash(data: zip).map { String(format: "%02x", $0) }.joined()
+        let xml = """
+        <sdk:sdk-repository xmlns:sdk="http://schemas.android.com/sdk/android/repo/repository2/03">
+          <remotePackage path="build-tools;37.0.0"><archives><archive><complete><size>9</size>
+            <checksum type="sha1">0000000000000000000000000000000000000000</checksum><url>build-tools-darwin.zip</url></complete>
+            <host-os>macosx</host-os></archive></archives></remotePackage>
+          <remotePackage path="platform-tools"><archives>
+            <archive><complete><size>5</size><checksum type="sha1">1111111111111111111111111111111111111111</checksum>
+              <url>platform-tools_r37.0.3-linux.zip</url></complete><host-os>linux</host-os></archive>
+            <archive><complete><size>\(zip.count)</size><checksum type="sha1">\(sha1)</checksum>
+              <url>platform-tools_r37.0.3-darwin.zip</url></complete><host-os>macosx</host-os></archive>
+          </archives></remotePackage>
+        </sdk:sdk-repository>
+        """
+        let archive = try XCTUnwrap(PlatformToolsArchive.fromManifest(Data(xml.utf8)))
+        XCTAssertEqual(archive.file, "platform-tools_r37.0.3-darwin.zip")
+        XCTAssertEqual(archive.url.absoluteString, "https://dl.google.com/android/repository/platform-tools_r37.0.3-darwin.zip")
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".zip")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try zip.write(to: file)
+        XCTAssertNoThrow(try archive.verify(file))
+        try Data("tampered".utf8).write(to: file)
+        XCTAssertThrowsError(try archive.verify(file))
+        XCTAssertNil(PlatformToolsArchive(file: "../adb-darwin.zip", size: 5, sha1: sha1))
+        XCTAssertNil(PlatformToolsArchive(file: "platform-tools_r1-darwin.zip", size: 5, sha1: "xyz"))
+        XCTAssertNil(PlatformToolsArchive.fromManifest(Data("<sdk/>".utf8)))
+    }
+
     private func release(url: String = "https://whoprrr.app/tv/whoprrr-tv-1.2.1.apk") throws -> TVRelease {
         let sha = SHA256.hash(data: fixture).map { String(format: "%02x", $0) }.joined()
         let data = try JSONSerialization.data(withJSONObject: [

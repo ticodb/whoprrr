@@ -191,6 +191,10 @@ struct TVDownloads: TVInstallNetwork {
         let (temporary, response) = try await URLSession.shared.download(for: request)
         defer { try? FileManager.default.removeItem(at: temporary) }
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw TVInstallError.badRelease }
+        // Cap the size before hashing: the published size when there is one, otherwise the release limit.
+        let cap = Int64(release.size ?? TVRelease.maxSize)
+        let size = (try? FileManager.default.attributesOfItem(atPath: temporary.path)[.size] as? NSNumber)?.int64Value ?? .max
+        guard response.expectedContentLength <= cap, size <= cap else { throw TVInstallError.badChecksum }
         // adb install requires an .apk suffix.
         let apk = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "-" + release.filename)
         try FileManager.default.moveItem(at: temporary, to: apk)
