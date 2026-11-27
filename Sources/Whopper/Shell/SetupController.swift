@@ -198,10 +198,13 @@ final class SetupController: ObservableObject {
         Shared.nav.page = page
     }
 
-    func openWindow() {
+    func openWindow(activate: Bool = true) {
         refreshGrants()
-        Shared.showWindow()
+        Shared.showWindow(activate: activate)
     }
+
+    /// When the after-update renewal window appeared. Renew counts only after it has been readable for a moment.
+    private var renewalShownAt: Date?
 
     func windowClosed() {
         stopGuide()
@@ -372,7 +375,10 @@ final class SetupController: ObservableObject {
         openWindow()
     }
 
+    /// The only way from the renewal window to System Settings, the guide card or a macOS prompt: a press on Renew.
     func renew() {
+        guard RenewalStart.allowed(shownAt: renewalShownAt, now: Date(), windowIsKey: Shared.windowIsKey) else { return }
+        renewalShownAt = nil
         tasteStarted = false
         progress.renewalStarted = true
         progress.skipped = []
@@ -408,26 +414,13 @@ final class SetupController: ObservableObject {
         let targets = Feature.allCases.filter { features.contains($0) && progress.parked[$0] == nil }
         // Features already run during the check; the deadline only bounds how long the result can take.
         let audit = await taste.auditAfterUpdate(targets, needs: needs, deadline: .seconds(6))
-        var next = progress
-        next.findings.merge(audit.findings) { _, current in current }
-        next.parked.merge(audit.park) { _, current in current }
-        next.build = AppInfo.build
-        next.updateCheckIncomplete = !audit.finished
-        next.updateOKUntil = audit.allWork && next.parked.isEmpty ? Date().addingTimeInterval(86_400) : nil
-        if !audit.park.isEmpty {
-            next.renewal.formUnion(audit.park.keys)
-            next.renewalStarted = false
-            next.askingAgain = nil
-            next.skipped = []
-            next.renewedGrants = []
-        }
-        next.grantedByTest = []
-        next.resetAttempts = [:]
-        progress = next
+        progress = progress.applyingAudit(audit, build: AppInfo.build, now: Date())
         auditing = false
         if !audit.park.isEmpty {
+            // Show the window with its Renew button, without focus. Nothing else starts until Renew is pressed.
+            renewalShownAt = Date()
             renewalVisible = true
-            openWindow()
+            openWindow(activate: false)
         }
     }
 }

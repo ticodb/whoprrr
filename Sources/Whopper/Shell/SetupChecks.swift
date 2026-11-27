@@ -128,8 +128,12 @@ final class SetupChecks: TasteProbing {
             }
             return TasteFinding(.notWorking, grants: [.microphone], detail: "No sound reached Whoprrr Mic. Speak into the selected mic and try again.")
         case .clipboard:
-            // Test a private pasteboard so the user's copied items stay in place. The public preflight
-            // in TasteTest separately proves that background reads of the general pasteboard are allowed.
+            if mode == .afterUpdate {
+                // Read-only after an update: nothing is written to any pasteboard and history is untouched.
+                return TasteFinding(.works, detail: "Clipboard history is on.")
+            }
+            // Taste test only: a private, uniquely named pasteboard. The general clipboard and history never see the
+            // test word, so there is nothing to restore.
             let board = NSPasteboard.withUniqueName()
             defer { board.releaseGlobally() }
             board.clearContents()
@@ -144,6 +148,9 @@ final class SetupChecks: TasteProbing {
                    (try? await model.controller.read(.brightness, target: target, logFailures: false)) != nil {
                     return TasteFinding(.works, detail: "The external display answered a brightness read.")
                 }
+            }
+            if mode == .afterUpdate {
+                return TasteFinding(.needsCheck, detail: "Could not check the external display after the update.")
             }
             return TasteFinding(.notWorking, detail: "No external display answered a brightness read.")
         }
