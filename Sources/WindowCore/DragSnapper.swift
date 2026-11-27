@@ -42,6 +42,7 @@ final class DragSnapper {
     private func down() {
         reset()
         guard AXWindow.isTrusted, let w = AXWindow.at(cursor()), let f = w.frame, !w.isFullScreen else { return }
+        guard w.pid != ProcessInfo.processInfo.processIdentifier else { return }
         tracked = w; startFrame = f
     }
 
@@ -55,6 +56,7 @@ final class DragSnapper {
             guard let f = w.frame, f.size == start.size, f.origin != start.origin else { return }
             dragging = true
         }
+        guard w.pid != ProcessInfo.processInfo.processIdentifier, !w.isFullScreen else { reset(); return }
         let c = cursor()
         let screens = ScreenMap.current()
         guard let screen = screens.first(where: { $0.frame.contains(c) }),
@@ -100,9 +102,12 @@ final class PreviewWindow {
             w.contentView = v
             window = w
         }
-        window?.setFrame(frame, display: true)
-        window?.orderFrontRegardless()
+        guard let window else { return }
+        if window.frame != frame { window.setFrame(frame, display: true) }
+        if !window.isVisible { window.orderFrontRegardless() }
     }
 
-    func hide() { window?.orderOut(nil) }
+    func hide() {
+        if window?.isVisible == true { window?.orderOut(nil) }
+    }
 }

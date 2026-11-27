@@ -103,6 +103,12 @@ private struct GrantGuideCard: View {
             Text(success ? "\(grant.title) is on." : instruction).font(Brand.body).fixedSize(horizontal: false, vertical: true)
             StatusChip(text: success ? "Got it. Bringing Whoprrr back…" : status, tone: success ? .good : .warn)
             if !success {
+                if grant == .accessibility || grant == .inputMonitoring {
+                    Button("Show this app in Finder") { NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL]) }
+                        .buttonStyle(.link)
+                    Text("If Whoprrr is missing, add this app with +. For an entry that won’t work, remove it with −, then add this copy again.")
+                        .font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
                 if expanded {
                     Divider()
                     Text("Can’t find it?").font(Brand.headline)

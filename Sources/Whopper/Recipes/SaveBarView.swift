@@ -110,7 +110,7 @@ struct SaveBarArea: View {
             }
         }
         if let recipe = recipes.active {
-            Button("Update recipe \(recipe.name)") { bar.save() }.buttonStyle(.brand)
+            Button("Update recipe \(recipe.name)") { bar.save() }.buttonStyle(.brand).keyboardShortcut("s", modifiers: .command)
         }
         Button("Create new…") { creating = true }.buttonStyle(.brandQuiet)
         Button("Put back") { bar.putBack() }.buttonStyle(.link).font(Brand.caption)

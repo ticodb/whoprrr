@@ -112,6 +112,20 @@ final class AudioModel: ObservableObject {
         if named != settings { settings = named }
     }
 
+    /// Release an existing tap before clearing its macOS permission so the next test opens a fresh capture.
+    func stopForPermissionReset(_ permission: Permission) async {
+        guard permission == .systemAudio || permission == .microphone else { return }
+        let engine = permission == .systemAudio ? eqEngine : nil
+        let mic = permission == .microphone ? micEngine : nil
+        await withCheckedContinuation { continuation in
+            engineControl.async {
+                engine?.stop()
+                mic?.stop()
+                continuation.resume()
+            }
+        }
+    }
+
     func beginEQTest() {
         processedPeak = 0
         testingEQ = true

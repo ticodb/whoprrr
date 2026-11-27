@@ -46,7 +46,6 @@ struct QuickView: View {
         // The .window menu-bar style is translucent; without a mostly opaque base, whatever is behind the drawer shows
         // through the faint card and button tints and the small text loses contrast.
         .background(Color(nsColor: .windowBackgroundColor).opacity(0.94))
-        .background(DrawerWindowReader())
         .onAppear { refreshPermissions(); windows.refreshTrust(); updates.lookQuietly() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refreshPermissions() }
     }
@@ -55,7 +54,7 @@ struct QuickView: View {
     @ViewBuilder private var updateLine: some View {
         switch updates.status {
         case .available(let version):
-            Button { Shared.showWindow(page: .about) } label: { Label("Update to \(version)", systemImage: "arrow.down.circle.fill") }
+            Button { Shared.openSection(.about) } label: { Label("Update to \(version)", systemImage: "arrow.down.circle.fill") }
                 .buttonStyle(.plain).font(Brand.subheadline.weight(.semibold)).foregroundStyle(Brand.accentText)
                 .help("A newer Whoprrr is ready. Click to see what is new and install it.")
         case .checking:
@@ -103,7 +102,7 @@ struct QuickView: View {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.system(size: 16))
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Needs permission: \(missing.map(\.title).joined(separator: ", "))").font(Brand.subheadline)
-                    Button("Review permissions") { Shared.showWindow(page: .permissions) }.buttonStyle(.brand)
+                    Button("Review permissions") { Shared.openSection(.permissions) }.buttonStyle(.brand)
                 }
             }
         }
@@ -124,14 +123,16 @@ struct QuickView: View {
         } else if recipes.recipes.isEmpty { value = "Save your setup for this gear" }
         return VStack(alignment: .leading, spacing: 6) {
             QuickRow(symbol: active?.symbol ?? "fork.knife", title: active?.name ?? "Recipe", value: value, opens: .recipes) {
-                Menu {
-                    ForEach(recipes.ranked(connected: connected)) { r in
-                        Button { recipes.apply(r.id) } label: { Label(r.name, systemImage: r.id == active?.id ? "checkmark" : r.symbol) }
-                    }
-                    if !recipes.recipes.isEmpty { Divider() }
-                    Button("New recipe from this setup…") { Shared.nav.newRecipeRequested = true; Shared.showWindow(page: .recipes) }
-                    Button("Manage recipes…") { Shared.showWindow(page: .recipes) }
-                } label: { Text("Switch") }.menuStyle(.button).buttonStyle(.brandQuiet).fixedSize()
+                if recipes.recipes.count > 1 {
+                    Menu {
+                        ForEach(recipes.ranked(connected: connected)) { r in
+                            Button { recipes.apply(r.id) } label: { Label(r.name, systemImage: r.id == active?.id ? "checkmark" : r.symbol) }
+                        }
+                        Divider()
+                        Button("New recipe from this setup…") { Shared.nav.newRecipeRequested = true; Shared.openSection(.recipes) }
+                        Button("Manage recipes…") { Shared.openSection(.recipes) }
+                    } label: { Text("Switch") }.menuStyle(.button).buttonStyle(.brandQuiet).fixedSize()
+                }
             }
             let typingForThisRecipe = typingLanguage.lastAppliedRecipeID == active?.id
             if let note = (typingForThisRecipe ? typingLanguage.note : nil) ?? recipes.notice {
@@ -175,7 +176,7 @@ struct QuickView: View {
         let rows = stride(from: 0, to: tiles.count, by: 8).map { Array(tiles[$0..<min($0 + 8, tiles.count)]) }
         return BrandCard {
             HStack { Text("Window").font(Brand.display(15, .semibold)); Spacer()
-                Button { Shared.showWindow(page: .feature(.windows)) } label: { Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)) }
+                Button { Shared.openSection(.feature(.windows)) } label: { Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)) }
                     .buttonStyle(.plain).foregroundStyle(Brand.accentText).help("Open Windows settings") }
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 HStack(spacing: 6) {
@@ -247,13 +248,13 @@ struct QuickView: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Button("Open Whoprrr") { Shared.showWindow() }.buttonStyle(.brand).keyboardShortcut("o")
+                Button("Open main window") { Shared.showWindow() }.buttonStyle(.brand).keyboardShortcut("o")
                     .background {
-                        Button("Open Whoprrr") { Shared.showWindow() }.keyboardShortcut(",")
+                        Button("Open main window") { Shared.showWindow() }.keyboardShortcut(",")
                             .opacity(0).accessibilityHidden(true).allowsHitTesting(false)
                     }
                 Spacer()
-                Button(AppInfo.shortVersionLine) { Shared.showWindow(page: .about) }
+                Button(AppInfo.shortVersionLine) { Shared.openSection(.about) }
                     .buttonStyle(.plain).font(Brand.caption).foregroundStyle(Brand.accentText)
                 Button("Quit") { NSApp.terminate(nil) }
                     .buttonStyle(.plain).font(Brand.subheadline).foregroundStyle(.secondary).keyboardShortcut("q")
@@ -277,30 +278,38 @@ struct QuickRow<Trailing: View>: View {
     /// Where a click on the row (anywhere except its own controls) opens in the main window.
     var opens: AppPage?
     @ViewBuilder var trailing: () -> Trailing
-    @State private var hover = false
     var body: some View {
         BrandCard {
             HStack(spacing: 12) {
-                Image(systemName: symbol).font(.system(size: 16, weight: .medium)).frame(width: 36, height: 36)
-                    .foregroundStyle(Color.white).background(Brand.tile, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(Brand.display(15, .semibold)).lineLimit(1)
-                    Text(value).font(Brand.caption).foregroundStyle(.secondary).lineLimit(2)
+                if let opens {
+                    Button { Shared.openSection(opens) } label: { description }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Open \(title)")
+                } else {
+                    description
                 }
                 Spacer(minLength: 6)
                 trailing()
             }
         }
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Brand.violetBright.opacity(hover && opens != nil ? 0.55 : 0)))
-        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .onHover { hover = $0 }
-        .onTapGesture { if let opens { Shared.showWindow(page: opens) } }
-        .help(opens == nil ? "" : "Open in Settings")
+    }
+
+    private var description: some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol).font(.system(size: 16, weight: .medium)).frame(width: 36, height: 36)
+                .foregroundStyle(Color.white).background(Brand.tile, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(Brand.display(15, .semibold)).lineLimit(1)
+                Text(value).font(Brand.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 }
 
 /// Remembers which window hosts the menu-bar drawer, so the main window can open right beside it.
-private struct DrawerWindowReader: NSViewRepresentable {
+struct DrawerWindowReader: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { Reader() }
     func updateNSView(_ nsView: NSView, context: Context) {}
     final class Reader: NSView {

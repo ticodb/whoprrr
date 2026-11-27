@@ -54,7 +54,8 @@ func groupMixProcesses(_ processes: [MixProcess], apps: [MixRunningApp], ownPID:
         groups[app.id] = MixApp(id: app.id, name: app.name, bundleURL: app.url, isPlaying: false)
     }
     for process in processes.sorted(by: { $0.objectID < $1.objectID }) where process.pid != ownPID {
-        let owner = owners[process.pid] ?? process.ancestors.lazy.compactMap { owners[$0] }.first
+        let matchingBundle = apps.first { $0.id == process.bundleID }
+        let owner = owners[process.pid] ?? matchingBundle ?? process.ancestors.lazy.compactMap { owners[$0] }.first
         if owner?.pid == ownPID || process.ancestors.contains(ownPID) { continue }
         let fallback = owner == nil ? process.unownedApp : nil
         let id = owner?.id ?? fallback?.id ?? MixApp.systemID
@@ -103,6 +104,7 @@ final class MixProcessMonitor: @unchecked Sendable {
     private var applications: [NSObjectProtocol] = []
     private var last: [MixApp]?
     private var listening = true
+    private var poller: DispatchSourceTimer?
     private lazy var listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.refresh() }
 
     // Launch services can reparent an XPC helper to launchd. Use its responsible PID when
@@ -120,6 +122,11 @@ final class MixProcessMonitor: @unchecked Sendable {
         var address = HAL.address(kAudioHardwarePropertyProcessObjectList)
         AudioObjectAddPropertyListenerBlock(HAL.system, &address, queue, listener)
         let center = NSWorkspace.shared.notificationCenter
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 1, repeating: 1, leeway: .milliseconds(150))
+        timer.setEventHandler { [weak self] in self?.refresh() }
+        timer.resume()
+        poller = timer
         applications = [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification].map {
             center.addObserver(forName: $0, object: nil, queue: nil) { [weak self] _ in
                 self?.queue.async { [weak self] in self?.refresh() }
@@ -156,6 +163,8 @@ final class MixProcessMonitor: @unchecked Sendable {
     func stop() {
         guard listening else { return }
         listening = false
+        poller?.cancel()
+        poller = nil
         var address = HAL.address(kAudioHardwarePropertyProcessObjectList)
         AudioObjectRemovePropertyListenerBlock(HAL.system, &address, queue, listener)
         address = HAL.address(kAudioProcessPropertyIsRunningOutput)

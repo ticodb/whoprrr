@@ -11,6 +11,14 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 - **Picklsss milestones** celebrate your first take, first accepted setup, first keep, and the ranks and takes that follow. Every take and share adds a pickle. See your burger grow on “My shared setups”.
 
 ### Changed
+- The menu-bar overview opens each section inside the drawer, with a way back to the overview. The recipe Switch menu appears when two or more recipes are available.
+- Audio effects use a searchable picker, and the mixer refreshes its audio process list periodically so newly active apps appear.
+- Permission renewal can clear a failed grant before asking again, with the current app available to add manually in System Settings.
+
+### Fixed
+- Snap previews update only when their position changes and skip Whoprrr’s own windows.
+
+### Changed
 - A pinned save bar names the sections you’ve edited and offers preset and recipe saves, Put back, and Undo. Press ⌘S to update the active recipe.
 - **One preset menu per section** shows built-ins, personal presets, and which preset is in use. Press ⌘U to update a personal preset. Manage presets to rename or delete yours, or hide and restore built-ins.
 - Open Whoprrr closes the menu-bar drawer and brings the main window to the current Space.

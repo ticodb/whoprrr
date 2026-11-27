@@ -20,7 +20,7 @@ struct OwnPermissionResetter: PermissionResetting {
         guard let service = permission.resetService, let bundle = Bundle.main.bundleIdentifier,
               Bundle.main.bundleURL.pathExtension == "app",
               ProcessInfo.processInfo.environment["WHOPPER_NO_START"] != "1",
-              ProcessInfo.processInfo.environment["WHOPPER_DATA_DIR"] == nil else { return false }
+              ProcessInfo.processInfo.environment["WHOPPER_DATA_DIR"] == nil || bundle.hasPrefix("gg.tico.whopper.qa.") else { return false }
         return await Task.detached {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
@@ -29,7 +29,7 @@ struct OwnPermissionResetter: PermissionResetting {
             process.standardError = FileHandle.nullDevice
             do { try process.run() } catch { return false }
             // Never wait forever: give up after 10 seconds and report that the reset didn't work.
-            for _ in 0..<200 where process.isRunning { Thread.sleep(forTimeInterval: 0.05) }
+            for _ in 0..<200 where process.isRunning { try? await Task.sleep(for: .milliseconds(50)) }
             if process.isRunning { process.terminate(); return false }
             return process.terminationStatus == 0
         }.value

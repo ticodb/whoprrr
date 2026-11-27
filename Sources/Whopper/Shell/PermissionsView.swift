@@ -56,6 +56,14 @@ struct PermissionsView: View {
                 } else if !users.isEmpty && status != .granted && (!checked || status != .unknown) && p != .camera {
                     Button("Grant") { setup.guideGrant(p); refreshSoon() }.buttonStyle(.brand)
                 }
+                if !users.isEmpty, setup.canReset(p) {
+                    Button("Reset and ask again") { setup.retry(p, reset: true); refreshSoon() }
+                        .buttonStyle(.brandQuiet).disabled(setup.working)
+                }
+                if p == .accessibility || p == .inputMonitoring {
+                    Button("Show app to add…") { NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL]) }
+                        .buttonStyle(.link).font(Brand.caption)
+                }
                 if p != .micDriver {
                     Button("Open pane") { NSWorkspace.shared.open(p.settingsURL) }.buttonStyle(.link).font(Brand.caption)
                 }

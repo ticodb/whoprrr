@@ -148,7 +148,7 @@ struct SetupView: View {
             grantRows
             HStack {
                 Button(grantAction(grant)) { setup.beginCurrentGrant(grant) }.buttonStyle(.brand)
-                if setup.isGranted(grant), setup.isStale(grant), setup.canReset(grant) {
+                if !setup.isStale(grant), setup.canReset(grant), setup.attemptedGrant == grant {
                     Button("Reset and ask again") { setup.retry(grant, reset: true) }.buttonStyle(.brandQuiet)
                 }
                 Button("Not now") { skipGrant = grant }.buttonStyle(.brandPlain)
@@ -177,6 +177,7 @@ struct SetupView: View {
     }
 
     private func grantAction(_ grant: Permission) -> String {
+        if setup.isStale(grant), setup.canReset(grant) { return "Reset and grant again" }
         if grant == .micDriver { return Shared.audio.driverInstalled ? "Check for Whoprrr Mic" : "Install Whoprrr Mic" }
         if grant == .systemAudio { return "Play the chime" }
         if grant == .microphone && setup.states[grant] == .notDetermined { return "Ask for microphone access" }

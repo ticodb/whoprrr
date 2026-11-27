@@ -7,6 +7,8 @@ struct PluginRackView: View {
     var target: PluginTarget
     @State private var catalog: [PluginInfo] = []
     @State private var loading = false
+    @State private var choosing = false
+    @State private var search = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -37,18 +39,61 @@ struct PluginRackView: View {
     }
 
     private var addMenu: some View {
-        Menu {
-            if catalog.isEmpty { Text(loading ? "Looking for plugins…" : "No effect plugins found") }
-            let makers = Dictionary(grouping: catalog, by: \.manufacturer).sorted { ($0.key == "Apple" ? "" : $0.key.lowercased()) < ($1.key == "Apple" ? "" : $1.key.lowercased()) }
-            ForEach(makers, id: \.key) { maker, infos in
-                Menu("\(maker) (\(infos.count))") {
-                    ForEach(infos) { info in Button(info.name) { m.addPlugin(info, to: target) } }
+        Button { search = ""; choosing = true } label: { Label("Add plugin", systemImage: "plus") }
+            .buttonStyle(.brand).fixedSize()
+            .popover(isPresented: $choosing, arrowEdge: .bottom) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("Add effect").font(Brand.headline)
+                        Spacer()
+                        Button("Done") { choosing = false }.buttonStyle(.brandPlain).keyboardShortcut(.cancelAction)
+                    }
+                    TextField("Search effects or makers", text: $search).textFieldStyle(.roundedBorder)
+                    if loading {
+                        ProgressView("Looking for plugins…").font(Brand.caption)
+                    } else if filteredPlugins.isEmpty {
+                        Text(catalog.isEmpty ? "No effect plugins found." : "No matching effects.")
+                            .font(Brand.caption).foregroundStyle(.secondary)
+                    } else {
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 2) {
+                                ForEach(filteredPlugins) { info in
+                                    Button {
+                                        choosing = false
+                                        m.addPlugin(info, to: target)
+                                    } label: {
+                                        HStack {
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(info.name).font(Brand.subheadline)
+                                                Text(info.manufacturer).font(Brand.caption2).foregroundStyle(.secondary)
+                                            }
+                                            Spacer()
+                                            Image(systemName: "plus").foregroundStyle(Brand.accentText)
+                                        }
+                                        .padding(.vertical, 6).padding(.horizontal, 8)
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Add \(info.name) by \(info.manufacturer)")
+                                }
+                            }
+                        }
+                        .frame(height: 300)
+                    }
+                    Divider()
+                    Button("Rescan plugins") { catalog = []; Task { await load() } }
+                        .buttonStyle(.brandPlain).disabled(loading)
                 }
+                .padding(14).frame(width: 340)
+                .tint(Brand.violetBright)
             }
-            Divider()
-            Button("Rescan plugins") { catalog = []; Task { await load() } }
-        } label: { Label("Add plugin", systemImage: "plus") }
-            .menuStyle(.button).buttonStyle(.brand).fixedSize()
+    }
+
+    private var filteredPlugins: [PluginInfo] {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        return catalog.filter {
+            query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) || $0.manufacturer.localizedCaseInsensitiveContains(query)
+        }
     }
 
     private func row(_ slot: PluginSlot, index: Int, count: Int) -> some View {

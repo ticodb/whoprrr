@@ -5,6 +5,11 @@ import WhopperKit
 /// The app proper: a sidebar of features and a roomy page for each. Setup, rule editing and every setting live here;
 /// the menu-bar panel (QuickView) is only for glancing and quick actions.
 struct MainWindowView: View {
+    var inDrawer = false
+
+    private var presentsSheets: Bool {
+        inDrawer ? nav.drawerOpen : nav.windowOpen && !nav.drawerOpen
+    }
     @EnvironmentObject var features: FeatureStore
     @EnvironmentObject var input: InputController
     @EnvironmentObject var nav: WindowNav
@@ -22,8 +27,10 @@ struct MainWindowView: View {
 
     private var app: some View {
         HStack(spacing: 0) {
-            sidebar.frame(width: 232)
-            Divider()
+            if !inDrawer {
+                sidebar.frame(width: 232)
+                Divider()
+            }
             VStack(spacing: 0) {
                 if !saveBar.changedSections.isEmpty || saveBar.confirmation != nil {
                     SaveBarArea()
@@ -58,14 +65,16 @@ struct MainWindowView: View {
                 }
             }
         }
-        .frame(minWidth: 860, minHeight: 620)
+        .frame(minWidth: inDrawer ? nil : 860, minHeight: inDrawer ? nil : 620)
         .tint(Brand.violetBright)
-        .sheet(item: Binding(get: { nav.windowOpen ? recipes.pendingSwitch : nil },
-                             set: { if $0 == nil, recipes.pendingSwitch != nil { recipes.resolveSwitch(.stay) } })) { AutoSwitchSheet(pending: $0) }
-        .sheet(item: $picklsss.sharing) { ShareFlowView(s: $0) }
-        .sheet(item: $backups.review) { BackupReviewSheet(controller: backups, item: $0) }
+        .sheet(item: Binding(get: { presentsSheets ? recipes.pendingSwitch : nil },
+                             set: { if presentsSheets, $0 == nil, recipes.pendingSwitch != nil { recipes.resolveSwitch(.stay) } })) { AutoSwitchSheet(pending: $0) }
+        .sheet(item: Binding(get: { presentsSheets ? picklsss.sharing : nil },
+                             set: { if presentsSheets { picklsss.sharing = $0 } })) { ShareFlowView(s: $0) }
+        .sheet(item: Binding(get: { presentsSheets ? backups.review : nil },
+                             set: { if presentsSheets { backups.review = $0 } })) { BackupReviewSheet(controller: backups, item: $0) }
         .alert(backups.problemTitle,
-               isPresented: Binding(get: { backups.problem != nil }, set: { if !$0 { backups.problem = nil } })) {
+               isPresented: Binding(get: { presentsSheets && backups.problem != nil }, set: { if presentsSheets, !$0 { backups.problem = nil } })) {
             if backups.problem == .newer {
                 Button("Check for Updates") { UpdateController.shared.checkForUpdates() }
                     .disabled(!UpdateController.shared.canCheck)
@@ -80,14 +89,14 @@ struct MainWindowView: View {
             if case .message(let text) = backups.problem { Text(text) }
             if backups.problem == .picklsssNeeded { Text("Taking a setup from a backup made with another key needs Picklsss.") }
         }
-        .alert("Presets", isPresented: Binding(get: { presetActions.problem != nil },
-                                              set: { if !$0 { presetActions.problem = nil } })) {
+        .alert("Presets", isPresented: Binding(get: { presentsSheets && presetActions.problem != nil },
+                                              set: { if presentsSheets, !$0 { presetActions.problem = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(presetActions.problem ?? "")
         }
-        .alert("Could not finish", isPresented: Binding(get: { saveBar.problem != nil },
-                                                      set: { if !$0 { saveBar.problem = nil } })) {
+        .alert("Could not finish", isPresented: Binding(get: { presentsSheets && saveBar.problem != nil },
+                                                      set: { if presentsSheets, !$0 { saveBar.problem = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(saveBar.problem ?? "")

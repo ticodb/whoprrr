@@ -18,7 +18,9 @@ struct MixerSection: View {
     private var rows: [Row] {
         let apps = Dictionary(model.mixApps.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let adjusted = model.settings.mix.apps
-        let ids = Set(adjusted.keys).union(model.mixApps.filter(\.isPlaying).map(\.id))
+        let ids = Set(adjusted.keys).union(model.mixApps.filter {
+            $0.isPlaying || (!$0.processIDs.isEmpty && $0.id != MixApp.systemID)
+        }.map(\.id))
         return ids.map { id in
             Row(id: id, name: apps[id]?.name ?? adjusted[id]?.name ?? id, app: apps[id])
         }.sorted {

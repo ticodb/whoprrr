@@ -211,9 +211,13 @@ final class SetupController: ObservableObject {
         if !auditing { run?.cancel() }
     }
 
-    /// "Open the switch for me" never resets. Clearing a stale grant is only the explicit "Reset and ask again" button.
+    /// Renew clears a grant whose previous feature test failed before asking macOS again.
     func beginCurrentGrant(_ grant: Permission) {
-        startGrant(grant, requireToggle: isGranted(grant) && isStale(grant))
+        if isStale(grant), canReset(grant) {
+            retry(grant, reset: true)
+        } else {
+            startGrant(grant, requireToggle: isGranted(grant) && isStale(grant))
+        }
     }
 
     private func startGrant(_ grant: Permission, requireToggle: Bool = false, track: Bool = true) {
@@ -339,6 +343,11 @@ final class SetupController: ObservableObject {
         working = true
         for feature in users(of: grant) { progress.findings[feature] = nil }
         run = Task {
+            if reset {
+                if grant == .systemAudio { checks.stopChimeTest() }
+                if grant == .microphone { Shared.audio.endMicTest() }
+                await Shared.audio.stopForPermissionReset(grant)
+            }
             let resetOK = !reset ? true : await taste.reset(grant)
             // Preserve the retry step before opening a pane that can relaunch the app.
             progress.grantedByTest.remove(grant)
@@ -350,7 +359,14 @@ final class SetupController: ObservableObject {
             refreshGrants()
             guard !Task.isCancelled else { return }
             startGrant(grant, requireToggle: !resetOK && states[grant] == .granted)
-            if !resetOK { note = "Whoprrr couldn’t clear this switch. Turn it off and on in System Settings." }
+            if reset, grant == .accessibility || grant == .inputMonitoring {
+                NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+                note = resetOK
+                    ? "The old grant was cleared. Add this copy of Whoprrr in System Settings and turn it on."
+                    : "Remove the existing Whoprrr entry with −, then add this copy with + and turn it on."
+            } else if !resetOK {
+                note = "Whoprrr couldn’t clear this switch. Turn it off and on in System Settings."
+            }
         }
     }
 

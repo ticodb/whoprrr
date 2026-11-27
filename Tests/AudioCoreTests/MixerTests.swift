@@ -73,6 +73,28 @@ final class MixerTests: XCTestCase {
         XCTAssertEqual(groups.count, 4)
     }
 
+    func testAudioProcessBundleWinsOverTheLauncherAndKeepsBrowserHelpersTogether() throws {
+        let apps = [
+            MixRunningApp(pid: 10, id: "net.whatsapp.WhatsApp", name: "WhatsApp"),
+            MixRunningApp(pid: 20, id: "gg.tico.brwsrrr", name: "brwsrrr"),
+            MixRunningApp(pid: 30, id: "com.apple.Terminal", name: "Terminal"),
+        ]
+        let groups = groupMixProcesses([
+            MixProcess(objectID: 101, pid: 11, bundleID: "net.whatsapp.WhatsApp", ancestors: [30], isPlaying: false),
+            MixProcess(objectID: 102, pid: 21, bundleID: "com.apple.WebKit.GPU", ancestors: [20], isPlaying: true),
+            MixProcess(objectID: 103, pid: 22, bundleID: "com.apple.WebKit.WebContent", ancestors: [20], isPlaying: false),
+        ], apps: apps, ownPID: 50)
+
+        XCTAssertEqual(groups.first { $0.id == "net.whatsapp.WhatsApp" }?.processIDs, [101])
+        let browser = try XCTUnwrap(groups.first { $0.id == "gg.tico.brwsrrr" })
+        XCTAssertEqual(browser.processIDs, [102, 103])
+        XCTAssertTrue(browser.isPlaying)
+        XCTAssertEqual(groups.first { $0.id == "com.apple.Terminal" }?.processIDs, [])
+        var mix = MixSettings()
+        mix.set(browser.id, volume: 0.3, muted: false, name: browser.name)
+        XCTAssertEqual(MixTapPlan(mix: mix, live: groups).apps.first?.processes, [102, 103])
+    }
+
     func testTapPlanFollowsAdjustedLiveProcessesAndKeepsFailedAppsInGlobalTap() {
         var mix = MixSettings()
         for id in ["a", "b", "closed"] { mix.set(id, volume: 0.5, muted: false, name: id) }

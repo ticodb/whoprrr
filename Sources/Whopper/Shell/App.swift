@@ -49,13 +49,22 @@ enum Shared {
     /// so no keystroke meant for another app can press a button here.
     static var windowIsKey: Bool { window?.isKeyWindow == true && NSApp.isActive }
 
+    static func openSection(_ page: AppPage) {
+        guard drawerWindow?.isVisible == true else { showWindow(page: page); return }
+        nav.openDrawerSection(page)
+    }
+
     static func showWindow(page: AppPage? = nil, activate: Bool = true) {
         SetupController.shared.refreshGrants()
         SetupController.shared.reconcileSetupGrants()
         let drawer = drawerFrame()          // read before activating: activating can close the drawer
         let wasVisible = window?.isVisible == true
         let movesSpace = wasVisible && window?.isOnActiveSpace == false
-        if drawer != nil { drawerWindow?.orderOut(nil) }
+        if drawer != nil {
+            nav.drawerOpen = false
+            nav.drawerPage = nil
+            drawerWindow?.orderOut(nil)
+        }
         if movesSpace { window?.orderOut(nil) }
         if let page { nav.page = page }
         else if !wasVisible, let part = saveBar.takeLandingPart() {
@@ -303,7 +312,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// The menu-bar panel, or the short "not activated" panel while there is no valid pass.
 struct QuickRoot: View {
     @ObservedObject private var license = LicenseController.shared
-    var body: some View { if license.isLicensed { QuickView() } else { LicenseQuickView() } }
+    @EnvironmentObject private var nav: WindowNav
+
+    var body: some View {
+        Group {
+            if !license.isLicensed {
+                LicenseQuickView()
+            } else if nav.drawerPage != nil {
+                VStack(spacing: 0) {
+                    HStack {
+                        Button { nav.returnToOverview() } label: { Label("Overview", systemImage: "chevron.left") }
+                            .buttonStyle(.brandPlain)
+                        Spacer()
+                        Menu("Sections") {
+                            Button("Recipes") { Shared.openSection(.recipes) }
+                            ForEach(Shared.features.enabledInOrder) { feature in
+                                Button(feature.shortTitle) { Shared.openSection(.feature(feature)) }
+                            }
+                            Divider()
+                            Button("Permissions") { Shared.openSection(.permissions) }
+                            Button("About") { Shared.openSection(.about) }
+                        }.menuStyle(.borderlessButton).fixedSize()
+                    }
+                    .padding(.horizontal, 20).padding(.vertical, 12)
+                    Divider()
+                    MainWindowView(inDrawer: true)
+                }
+                .frame(width: 720, height: min(720, (NSScreen.main?.visibleFrame.height ?? 800) - 70))
+            } else {
+                QuickView()
+            }
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
+        .background(DrawerWindowReader())
+        .onAppear { nav.drawerOpen = true }
+        .onDisappear {
+            nav.drawerOpen = false
+            Shared.saveBar.noteLeaving()
+        }
+    }
 }
 
 @main

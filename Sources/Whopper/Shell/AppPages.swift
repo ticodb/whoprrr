@@ -48,6 +48,15 @@ final class WindowNav: ObservableObject {
     @Published var newRecipeRequested = false
     /// Questions that belong to the main window wait until it is on screen.
     @Published var windowOpen = false
+    @Published var drawerOpen = false
+    @Published var drawerPage: AppPage?
+
+    func openDrawerSection(_ section: AppPage) {
+        page = section
+        drawerPage = section
+    }
+
+    func returnToOverview() { drawerPage = nil }
     @Published var page: AppPage = AppPage(name: ProcessInfo.processInfo.environment["WHOPPER_PAGE"] ?? "") ?? .feature(.display)
 }
 
