@@ -5,7 +5,7 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 ## Unreleased
 
 ### Added
-- **Recipes behave like documents**: while the active recipe differs from your settings, the main window shows a save bar on every page (Save, Save as new recipe, Put back). It waits until you have left the settings alone for 2 seconds; until then only a small "Cookin'" label shows. After saving there is a confirmation with Undo, and every recipe keeps the version from before its last save: "Go back to the version before…" in its menu swaps the two, so going back can itself be undone.
+- **Quieter recipe saves**: the page title shows “Cookin’” and the recipe name while you make changes. Open it to save, make a new recipe, or put things back. Press ⌘S anywhere in the main window to save. A reminder appears when you leave a page, and “Not yet” keeps it away until the next change. The saved message offers Undo for four seconds and stays while you hover over it. The recipe menu still keeps the previous saved version.
 - **Unsaved changes are never dropped**: closing the window asks nothing and the change stays live, also after a quit. The next time the window opens it lands on the page that changed with a reminder, until you save or put back. When gear changes would switch recipes automatically and the current one has unsaved changes, Whoprrr asks first (save then switch, switch without saving, or stay).
 - **Gear is stored by role and model** (for example microphone, "RØDE PodMic USB") as well as what this Mac needs to recognise it, so a recipe file makes sense on another Mac. `recipes.json` now has a `formatVersion`. An older file is converted on first launch and the original is kept beside it as `recipes.backup-v1.json`; a file that cannot be read is kept aside as `.bad` and never overwritten.
 - **Picklsss, the shelf of setups other people shared**: a page with tabs For your gear, Popular and New, and search. Browsing needs no extra and sends nothing about your gear (ranking is done on your Mac). Open one to see every line with a fit label judged against *your* gear, match their devices to yours, review a before and after, and apply with "Cookin'". The result is an ordinary recipe, with two ways back in its menu (before your last save; the author's original as fitted) and one button that puts everything back. Take one part on its own into your presets. Plugins are never downloaded or installed; a missing one is a link you may click.
@@ -19,7 +19,7 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 - Debug builds: `WHOPRRR_SCRIPT` runs JSON steps and takes screenshots for end-to-end checks; the display presets now follow `WHOPPER_DATA_DIR` too.
 
 ### Changed
-- "Update with my current settings" in a recipe's menu and the "Active, changed" chip are replaced by the save bar.
+- "Update with my current settings" in a recipe's menu and the "Active, changed" chip are replaced by the “Cookin’” menu.
 
 ## 0.9.0 beta 3: recipes no longer look changed when they are not
 

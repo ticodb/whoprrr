@@ -51,6 +51,16 @@ enum DebugDriver {
         case "wait": try? await Task.sleep(nanoseconds: UInt64((s["secs"] as? Double ?? 1) * 1e9))
         case "page": Shared.nav.page = AppPage(name: str("name")) ?? .recipes
         case "shot": shot(str("name"))
+        case "recipe-save-seed":
+            Shared.nav.page = .feature(.windows)
+            _ = Shared.recipes.create(name: "Home Office", symbol: "house", includes: ["windows"], devices: [], autoApply: false)
+        case "recipe-save-change":
+            Shared.windows.settings.gap = s["gap"] as? Double ?? 18
+            Shared.saveBar.settingsDidChange()
+        case "recipe-save-not-yet": Shared.saveBar.dismissReminder()
+        case "recipe-save-now": Shared.saveBar.save()
+        case "recipe-save-state":
+            emit("recipe save: \(Shared.saveBar.phase), reminder=\(Shared.saveBar.reminderRecipe ?? "-")")
         case "say": emit("\(str("what")): \(describe())")
         case "shelf":
             if let t = s["tab"] as? String, let tab = PicklsssController.BrowseTab(rawValue: t) { c.tab = tab }
@@ -180,7 +190,7 @@ enum DebugDriver {
         // The page as the window lays it out (a ScrollView draws nothing in an image, so the page is drawn without one): the same
         // 680-wide column with 28 points around it, the reminder and notices above it, the save bar below.
         let page = VStack(alignment: .leading, spacing: 16) {
-            StoveReminder(); NoticesBar(); PageContent(page: Shared.nav.page)
+            StoveReminder(); NoticesBar(); PageContent(page: Shared.nav.page).environment(\.showsRecipeSaveMark, true)
             SaveBarArea()
         }.padding(28).frame(width: 680 + 56, alignment: .topLeading)
         write(Shared.wrap(page).tint(Brand.violetBright), name, 680 + 56, nil)

@@ -47,8 +47,14 @@ final class WindowNav: ObservableObject {
     /// Set by the menu-bar panel to open the window straight into the new-recipe sheet.
     @Published var newRecipeRequested = false
     /// True while the main window is on screen. Questions and reminders that belong to it wait until it is.
-    @Published var windowOpen = false
-    @Published var page: AppPage = AppPage(name: ProcessInfo.processInfo.environment["WHOPPER_PAGE"] ?? "") ?? .feature(.display)
+    @Published var windowOpen = false {
+        didSet { if !windowOpen { onClose?() } }
+    }
+    @Published var page: AppPage = AppPage(name: ProcessInfo.processInfo.environment["WHOPPER_PAGE"] ?? "") ?? .feature(.display) {
+        didSet { if windowOpen && oldValue != page { onPageChange?() } }
+    }
+    var onPageChange: (() -> Void)?
+    var onClose: (() -> Void)?
 }
 
 /// The content of one page. Each feature supplies its own panel.

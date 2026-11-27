@@ -26,13 +26,13 @@ struct MainWindowView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         StoveReminder()
                         NoticesBar()
-                        PageContent(page: nav.page)
+                        PageContent(page: nav.page).environment(\.showsRecipeSaveMark, true)
                     }
                     .padding(28)
                     .frame(maxWidth: 680, alignment: .topLeading)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
-                // Cookin', the save bar and its confirmation: on every page of this window, never in the menu-bar panel.
+                // Reminders and confirmations are shared by every page of the window.
                 SaveBarArea()
                     .padding(.horizontal, 28).padding(.bottom, 14)
                     .frame(maxWidth: 680 + 56, alignment: .leading)

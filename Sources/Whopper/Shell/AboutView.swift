@@ -3,6 +3,7 @@ import AppKit
 
 /// Version, how to report a problem, the privacy promise and who made what Whoprrr stands on.
 struct AboutView: View {
+    @Environment(\.showsRecipeSaveMark) private var showsRecipeSaveMark
     @State private var copied = false
 
     /// "Activated on this Mac until 25 December 2026 · Mac 2 of 3". Never the key: the app does not keep it.
@@ -23,6 +24,7 @@ struct AboutView: View {
                     HStack(spacing: 10) {
                         Wordmark(size: 34)
                         if AppInfo.isBeta { StatusChip(text: "Beta", tone: .warn) }
+                        if showsRecipeSaveMark { RecipeSaveMark() }
                     }
                     Text(AppInfo.tagline).font(Brand.body).foregroundStyle(.secondary)
                     Text(AppInfo.versionLine).font(Brand.caption).foregroundStyle(.secondary)
