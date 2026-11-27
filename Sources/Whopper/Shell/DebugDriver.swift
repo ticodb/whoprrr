@@ -13,6 +13,7 @@ import WhopperKit
 enum DebugDriver {
     private static var env: [String: String] { ProcessInfo.processInfo.environment }
     private static var log: FileHandle?
+    private static var presetPreview: (key: String, managing: Bool, more: String)?
 
     static func startIfRequested() {
         guard let path = env["WHOPRRR_SCRIPT"], let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
@@ -51,6 +52,61 @@ enum DebugDriver {
         case "wait": try? await Task.sleep(nanoseconds: UInt64((s["secs"] as? Double ?? 1) * 1e9))
         case "page": Shared.nav.page = AppPage(name: str("name")) ?? .recipes
         case "shot": shot(str("name"))
+        case "recipe-save-seed":
+            Shared.nav.page = .feature(.windows)
+            _ = Shared.recipes.create(name: "Home Office", symbol: "house", includes: ["windows"], devices: [], autoApply: false)
+        case "recipe-save-change":
+            Shared.windows.settings.gap = s["gap"] as? Double ?? 18
+            Shared.saveBar.settingsDidChange()
+        case "recipe-save-not-yet": Shared.saveBar.dismissReminder()
+        case "recipe-save-now": Shared.saveBar.save()
+        case "recipe-save-state":
+            emit("recipe save: \(Shared.saveBar.phase), reminder=\(Shared.saveBar.reminderRecipe ?? "-")")
+        case "preset-seed":
+            Shared.nav.page = .feature(.audio)
+            let uid = "debug-xm4"
+            Shared.audio.settings.eq.targetUID = uid
+            Shared.audio.settings.knownNames[uid] = "Tico’s XM4s"
+            Shared.audio.settings.eq.profiles[uid] = .flat
+            let surface = PresetSurfaces.eq(Shared.audio)
+            if let data = surface.capture() {
+                Shared.presets.save("M1 MacBook Air", data: data, for: surface.key)
+                Shared.presets.save("Xiaomi SO", data: data, for: surface.key)
+                Shared.presets.saveNew("Sony XM4", data: data, at: surface.location)
+            }
+            _ = Shared.recipes.create(name: "Home Office", symbol: "house", includes: ["audio"], devices: [], autoApply: false)
+        case "preset-menu-open": presetPreview = (str("key"), false, "")
+        case "preset-manage-open": presetPreview = (str("key"), true, str("more"))
+        case "preset-preview-close": presetPreview = nil
+        case "preset-change-eq":
+            Shared.audio.eqProfile.preampDB = s["preamp"] as? Double ?? -2
+            Shared.saveBar.settingsDidChange()
+        case "preset-update":
+            if let surface = PresetSurfaces.surface(str("key")), let entry = surface.groups(in: Shared.presets).inUse {
+                Shared.presetActions.update(entry, on: surface)
+                emit("preset update: \(Shared.saveBar.confirmation?.message ?? "-")")
+            }
+        case "preset-undo":
+            Shared.saveBar.undoSave()
+            emit("preset undo: preamp=\(Shared.audio.eqProfile.preampDB)")
+        case "milestone-show":
+            let rank = CookRank(shelfName: s["rank"] as? String)
+            let count = s["pickles"] as? Int ?? 0
+            let kind: PicklsssMilestone.Kind
+            switch str("kind") {
+            case "rank":
+                guard let rank else { emit("milestone: missing rank"); return }
+                kind = .rank(rank)
+            case "keep": kind = .firstKeep
+            case "first-take": kind = .firstTake(title: str("title"), inRecipes: true)
+            case "ten": kind = .tenTakes
+            case "twenty-five": kind = .twentyFiveTakes
+            case "fifty": kind = .fiftyTakes
+            default: kind = .pickle
+            }
+            let sample = PicklsssMilestone(kind: kind, rank: rank, pickles: count)
+            c.showDebugMilestone(sample)
+            emit("milestone: \(sample.title), rank=\(rank?.name ?? "-"), pickles=\(count)")
         case "say": emit("\(str("what")): \(describe())")
         case "shelf":
             if let t = s["tab"] as? String, let tab = PicklsssController.BrowseTab(rawValue: t) { c.tab = tab }
@@ -180,10 +236,25 @@ enum DebugDriver {
         // The page as the window lays it out (a ScrollView draws nothing in an image, so the page is drawn without one): the same
         // 680-wide column with 28 points around it, the reminder and notices above it, the save bar below.
         let page = VStack(alignment: .leading, spacing: 16) {
-            StoveReminder(); NoticesBar(); PageContent(page: Shared.nav.page)
+            StoveReminder(); NoticesBar(); PageContent(page: Shared.nav.page).environment(\.showsRecipeSaveMark, true)
             SaveBarArea()
         }.padding(28).frame(width: 680 + 56, alignment: .topLeading)
+            .overlay(alignment: .top) {
+                if let milestone = c.milestone {
+                    PicklsssMilestoneView(milestone: milestone).padding(.top, 76)
+                }
+            }
         write(Shared.wrap(page).tint(Brand.violetBright), name, 680 + 56, nil)
+        if let preview = presetPreview, let surface = PresetSurfaces.surface(preview.key) {
+            let groups = surface.groups(in: Shared.presets)
+            if preview.managing {
+                let more = (groups.yours + groups.builtIn).first { $0.name == preview.more }?.id
+                write(Shared.wrap(ManagePresetsView(surface: surface, previewActionsFor: more, renderAllRows: true)), "\(name)-sheet", 480, nil)
+            } else {
+                let picker = PresetPickerContents(surface: surface, groups: groups, close: {}, saveNew: {}, manage: {}, renderAllRows: true)
+                write(Shared.wrap(picker), "\(name)-menu", 268, nil)
+            }
+        }
         if let t = c.take, t.askCount { write(Shared.wrap(CountSheet(s: t)).padding(20), "\(name)-sheet", 560, nil) }
         if let sh = c.sharing { write(Shared.wrap(ShareFlowView(s: sh).content), "\(name)-share", 560, nil) }
     }

@@ -24,7 +24,7 @@ public struct LivePermissionChecker: PermissionChecking {
             }
         case .camera: return Self.map(AVCaptureDevice.authorizationStatus(for: .video))
         case .microphone: return Self.map(AVCaptureDevice.authorizationStatus(for: .audio))
-        case .systemAudio, .micDriver: return .unknown
+        case .micDriver: return .unknown
         case .paste:
             guard #available(macOS 15.4, *) else { return .granted }
             switch NSPasteboard.general.accessBehavior {
@@ -33,6 +33,23 @@ public struct LivePermissionChecker: PermissionChecking {
             case .default, .ask: return .notDetermined
             @unknown default: return .unknown
             }
+        case .systemAudio: return Self.systemAudioStatus()
+        }
+    }
+
+    /// System Audio Recording has no public way to read its grant. macOS answers through the same call its own apps use
+    /// (`TCCAccessPreflight` in the system's TCC framework), looked up at run time so nothing links against it. It only
+    /// reads the grant and never shows a prompt. If the call is missing on some macOS version, the answer stays unknown,
+    /// which the Permissions page shows as before.
+    private static func systemAudioStatus() -> PermissionStatus {
+        typealias Preflight = @convention(c) (CFString, CFDictionary?) -> Int
+        guard let tcc = dlopen("/System/Library/PrivateFrameworks/TCC.framework/Versions/A/TCC", RTLD_NOW) else { return .unknown }
+        defer { dlclose(tcc) }
+        guard let symbol = dlsym(tcc, "TCCAccessPreflight") else { return .unknown }
+        switch unsafeBitCast(symbol, to: Preflight.self)("kTCCServiceAudioCapture" as CFString, nil) {
+        case 0: return .granted
+        case 1: return .denied
+        default: return .notDetermined
         }
     }
 

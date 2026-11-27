@@ -55,10 +55,6 @@ public enum RecipeWording {
         "\(recipe) has changes you have not saved: \(parts.joined(separator: ", "))"
     }
 
-    /// The small label while a deliberate wait runs.
-    public static func changingLabel(recipe: String) -> String { "\(recipe) is changing" }
-    public static func savingLabel(recipe: String) -> String { "Saving \(recipe)" }
-
     // MARK: Auto-switch
 
     public static let switchQuestionTitle = "Your gear changed"

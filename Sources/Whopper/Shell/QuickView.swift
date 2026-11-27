@@ -49,6 +49,28 @@ struct QuickView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refreshPermissions() }
     }
 
+    /// The update line says what it knows: it looks when the panel opens, then reads "Up to date" or names the new version.
+    @ViewBuilder private var updateLine: some View {
+        switch updates.status {
+        case .available(let version):
+            Button { Shared.showWindow(page: .about) } label: { Label("Update to \(version)", systemImage: "arrow.down.circle.fill") }
+                .buttonStyle(.plain).font(Brand.subheadline.weight(.semibold)).foregroundStyle(Brand.accentText)
+                .help("A newer Whoprrr is ready. Click to see what is new and install it.")
+        case .checking:
+            HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Checking for updates…") }
+                .font(Brand.subheadline).foregroundStyle(.secondary)
+        case .upToDate:
+            Button { updates.look(force: true) } label: { Label("Up to date", systemImage: "checkmark.circle") }
+                .buttonStyle(.plain).font(Brand.subheadline).foregroundStyle(.secondary).help("Click to check again")
+        case .failed:
+            Button { updates.look(force: true) } label: { Label("Could not check. Try again", systemImage: "exclamationmark.circle") }
+                .buttonStyle(.plain).font(Brand.subheadline).foregroundStyle(.secondary)
+        case .unknown:
+            Button("Check for updates") { updates.look(force: true) }.buttonStyle(.plain).font(Brand.subheadline).foregroundStyle(.secondary)
+                .disabled(!updates.canCheck)
+        }
+    }
+
     // MARK: Pieces
 
     private var header: some View {
@@ -56,9 +78,6 @@ struct QuickView: View {
             LogoMark(size: 38).shadow(color: Brand.violetDeep.opacity(0.35), radius: 4, y: 2)
             Wordmark(size: 24)
             Spacer()
-            Button { Shared.showWindow() } label: { Image(systemName: "gearshape").font(.system(size: 16, weight: .medium)) }
-                .buttonStyle(.plain).help("Settings (⌘,)").foregroundStyle(Brand.accentText).keyboardShortcut(",")
-                .accessibilityLabel("Settings")
         }
     }
 
@@ -217,16 +236,11 @@ struct QuickView: View {
 
     private var footer: some View {
         HStack {
-            // The version doubles as the way to updates: violet while this is the latest build, the notice colour when a
-            // newer one is waiting on the About page.
-            Button { Shared.showWindow(page: .about) } label: {
-                Text(updates.newerVersion == nil ? AppInfo.shortVersionLine : "\(AppInfo.shortVersionLine) · Update available")
-                    .font(Brand.subheadline)
-                    .foregroundStyle(updates.newerVersion == nil ? Brand.accentText : StatusChip.Tone.warn.text)
-            }
-            .buttonStyle(.plain)
-            .help(updates.newerVersion.map { "Whoprrr \($0) is available. Open About to install it." } ?? "This is the latest version. Open About.")
+            Button("Settings…") { Shared.showWindow() }.buttonStyle(.brand).keyboardShortcut(",")
+            if updates.isAvailable { updateLine }
             Spacer()
+            Button(AppInfo.shortVersionLine) { Shared.showWindow(page: .about) }
+                .buttonStyle(.plain).font(Brand.caption).foregroundStyle(Brand.accentText)
             Button("Quit") { NSApp.terminate(nil) }.buttonStyle(.plain).font(Brand.subheadline).foregroundStyle(.secondary).keyboardShortcut("q")
         }
         .padding(.top, 2)

@@ -219,6 +219,11 @@ public enum AutoSwitchChoice: Sendable {
     case stay
 }
 
+struct PresetRecipeEdit: Codable, Sendable {
+    let before: Recipe
+    let after: Recipe
+}
+
 // MARK: Store
 
 /// All recipes, which one is active, and the logic to capture, apply, save and auto-apply them.
@@ -362,6 +367,12 @@ public final class RecipeStore: ObservableObject {
             .sorted { (title(forPart: $0), $0) < (title(forPart: $1), $1) }
     }
 
+    func canonicalSnapshot(_ sections: [String: Data]) -> [String: Data] {
+        sections.reduce(into: [:]) { result, entry in
+            result[entry.key] = surfaces[entry.key]?.canonicalRecipeData(entry.value) ?? entry.value
+        }
+    }
+
     /// Titles of `changedParts`.
     public func changedPartTitles(live: [String: Data]? = nil) -> [String] { changedParts(live: live).map(title(forPart:)) }
 
@@ -421,15 +432,9 @@ public final class RecipeStore: ObservableObject {
     @discardableResult
     public func save(_ id: UUID, devices: [DeviceSignature]? = nil) -> Bool {
         guard let i = recipes.firstIndex(where: { $0.id == id }) else { return false }
-        let fresh = snapshot(Set(recipes[i].sections.keys))
-        let t = now()
-        var changed = false
-        if fresh != recipes[i].sections {
-            recipes[i].previous = RecipeVersion(sections: recipes[i].sections, savedAt: recipes[i].updatedAt, replacedAt: t)
-            recipes[i].sections = fresh
-            recipes[i].updatedAt = t
-            changed = true
-        }
+        let updated = capturedVersion(of: recipes[i])
+        let changed = updated.sections != recipes[i].sections
+        if changed { recipes[i] = updated }
         if let devices { recipes[i].devices = devices }
         if activeID == id { applied = recipes[i].sections; clearUnsaved() }
         save()
@@ -477,11 +482,8 @@ public final class RecipeStore: ObservableObject {
     /// person hears and sees the version they asked for. Doing it twice returns to where it started. Nil if there is no previous version.
     @discardableResult
     public func goBack(_ id: UUID) -> [String]? {
-        guard let i = recipes.firstIndex(where: { $0.id == id }), let prev = recipes[i].previous else { return nil }
-        let aside = RecipeVersion(sections: recipes[i].sections, savedAt: recipes[i].updatedAt, replacedAt: now(), isNewer: !prev.isNewer)
-        recipes[i].sections = prev.sections
-        recipes[i].updatedAt = prev.savedAt
-        recipes[i].previous = aside
+        guard let i = recipes.firstIndex(where: { $0.id == id }), let swapped = swappedVersion(of: recipes[i]) else { return nil }
+        recipes[i] = swapped
         var failed: [String] = []
         if activeID == id {
             failed = applySections(recipes[i])
@@ -490,6 +492,61 @@ public final class RecipeStore: ObservableObject {
         save()
         onChange?()
         return failed
+    }
+
+    func presetSave(for before: Recipe) -> PresetRecipeEdit? {
+        let after = capturedVersion(of: before)
+        return after.sections == before.sections ? nil : PresetRecipeEdit(before: before, after: after)
+    }
+
+    func presetUndo(_ edit: PresetRecipeEdit) -> PresetRecipeEdit? {
+        guard hasPresetVersion(edit.after), let current = recipe(edit.after.id), let previous = swappedVersion(of: current) else { return nil }
+        return PresetRecipeEdit(before: current, after: previous)
+    }
+
+    func hasPresetVersion(_ version: Recipe) -> Bool {
+        guard let current = recipe(version.id) else { return false }
+        return current.sections == version.sections && current.updatedAt == version.updatedAt && current.previous == version.previous
+    }
+
+    /// Writes before publishing so a failed recipe write can roll the preset back without applying anything.
+    func commitPresetEdit(_ edit: PresetRecipeEdit, apply: Bool) -> Bool {
+        guard canWrite, hasPresetVersion(edit.before), let index = recipes.firstIndex(where: { $0.id == edit.before.id }) else { return false }
+        let active = activeID == edit.before.id
+        var next = recipes
+        next[index] = edit.after
+        let file = RecipeFile(recipes: next, activeID: activeID, appliedSections: active ? edit.after.sections : applied,
+                              changedAt: active ? nil : changedAt, stove: active ? nil : stove)
+        guard fileStore.save(file) else { return false }
+        recipes = next
+        if active {
+            if apply { _ = applySections(edit.after) }
+            applied = apply ? snapshot(Set(edit.after.sections.keys)) : edit.after.sections
+            clearUnsaved()
+            if applied != file.appliedSections { save() }
+        }
+        onChange?()
+        return true
+    }
+
+    private func capturedVersion(of recipe: Recipe) -> Recipe {
+        let fresh = snapshot(Set(recipe.sections.keys))
+        guard fresh != recipe.sections else { return recipe }
+        let t = now()
+        var updated = recipe
+        updated.previous = RecipeVersion(sections: recipe.sections, savedAt: recipe.updatedAt, replacedAt: t)
+        updated.sections = fresh
+        updated.updatedAt = t
+        return updated
+    }
+
+    private func swappedVersion(of recipe: Recipe) -> Recipe? {
+        guard let previous = recipe.previous else { return nil }
+        var updated = recipe
+        updated.previous = RecipeVersion(sections: recipe.sections, savedAt: recipe.updatedAt, replacedAt: now(), isNewer: !previous.isNewer)
+        updated.sections = previous.sections
+        updated.updatedAt = previous.savedAt
+        return updated
     }
 
     // MARK: The author's original
@@ -599,43 +656,5 @@ public final class RecipeStore: ObservableObject {
             return Double(g.present.count) / Double(r.devices.count) + (g.missing.isEmpty ? 1 : 0)
         }
         return recipes.enumerated().sorted { (score($0.element), -$0.offset) > (score($1.element), -$1.offset) }.map(\.element)
-    }
-}
-
-// MARK: Per-surface presets
-
-public struct SavedPreset: Codable, Identifiable, Equatable, Sendable {
-    public var id = UUID()
-    public var name: String
-    public var date = Date()
-    public var data: Data
-    public init(name: String, data: Data) { self.name = name; self.data = data }
-}
-
-/// Named presets for individual settings surfaces (an EQ curve, a mic chain, a set of key rules…), shared by every
-/// surface's "Presets" menu. A recipe bundles whole surfaces for a set of gear; a preset is one surface on its own.
-@MainActor
-public final class PresetLibrary: ObservableObject {
-    private let store: JSONStore<[String: [SavedPreset]]>
-    @Published public private(set) var all: [String: [SavedPreset]]
-
-    public init(url: URL? = nil) {
-        store = url.map { JSONStore<[String: [SavedPreset]]>(url: $0) } ?? JSONStore<[String: [SavedPreset]]>(name: "presets")
-        all = store.load(default: [:])
-    }
-
-    public func presets(for surface: String) -> [SavedPreset] { (all[surface] ?? []).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending } }
-
-    /// Saves under `name`, replacing a preset of the same name.
-    @discardableResult
-    public func save(_ name: String, data: Data, for surface: String) -> SavedPreset {
-        var list = all[surface] ?? []
-        let p = SavedPreset(name: name, data: data)
-        if let i = list.firstIndex(where: { $0.name == name }) { var q = p; q.id = list[i].id; list[i] = q } else { list.append(p) }
-        all[surface] = list; store.save(all)
-        return p
-    }
-    public func delete(_ id: UUID, for surface: String) {
-        all[surface]?.removeAll { $0.id == id }; store.save(all)
     }
 }

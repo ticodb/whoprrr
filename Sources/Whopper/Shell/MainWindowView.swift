@@ -10,6 +10,7 @@ struct MainWindowView: View {
     @EnvironmentObject var nav: WindowNav
     @EnvironmentObject var recipes: RecipeStore
     @ObservedObject private var setup = SetupController.shared
+    @EnvironmentObject private var presetActions: PresetActions
     @ObservedObject private var license = LicenseController.shared
     @ObservedObject private var picklsss = PicklsssController.shared
 
@@ -34,18 +35,25 @@ struct MainWindowView: View {
                                     setup.continueParked([feature])
                                 }.buttonStyle(.brand)
                             }
-                            PageContent(page: nav.page).disabled(true)
-                        } else { PageContent(page: nav.page) }
+                            PageContent(page: nav.page).environment(\.showsRecipeSaveMark, true).disabled(true)
+                        } else { PageContent(page: nav.page).environment(\.showsRecipeSaveMark, true) }
                     }
                     .padding(28)
                     .frame(maxWidth: 680, alignment: .topLeading)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
-                // Cookin', the save bar and its confirmation: on every page of this window, never in the menu-bar panel.
+                // Reminders and confirmations are shared by every page of the window.
                 SaveBarArea()
                     .padding(.horizontal, 28).padding(.bottom, 14)
                     .frame(maxWidth: 680 + 56, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .overlay(alignment: .top) {
+                if let milestone = picklsss.milestone {
+                    PicklsssMilestoneView(milestone: milestone)
+                        .id(milestone.id)
+                        .padding(.top, 76)
+                }
             }
         }
         .frame(minWidth: 860, minHeight: 620)
@@ -53,6 +61,12 @@ struct MainWindowView: View {
         .sheet(item: Binding(get: { nav.windowOpen ? recipes.pendingSwitch : nil },
                              set: { if $0 == nil, recipes.pendingSwitch != nil { recipes.resolveSwitch(.stay) } })) { AutoSwitchSheet(pending: $0) }
         .sheet(item: $picklsss.sharing) { ShareFlowView(s: $0) }
+        .alert("Presets", isPresented: Binding(get: { presetActions.problem != nil },
+                                              set: { if !$0 { presetActions.problem = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(presetActions.problem ?? "")
+        }
         .onChange(of: features.enabled) { _, _ in
             if case .feature(let f) = nav.page, !features.isEnabled(f) { nav.page = .features }
         }

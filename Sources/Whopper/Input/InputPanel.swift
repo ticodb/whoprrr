@@ -330,6 +330,7 @@ struct RuleEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             PanelHeader(rule.name.isEmpty ? "Rule" : rule.name, symbol: "slider.horizontal.3")
+                .environment(\.showsRecipeSaveMark, false)
             TextField("Name (optional)", text: $rule.name).textFieldStyle(.roundedBorder)
 
             BrandCard {

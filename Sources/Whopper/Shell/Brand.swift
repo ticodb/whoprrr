@@ -132,6 +132,7 @@ struct SectionLabel: View {
 
 /// Icon tile + title for the top of each feature panel.
 struct PanelHeader<Trailing: View>: View {
+    @Environment(\.showsRecipeSaveMark) private var showsRecipeSaveMark
     var symbol: String
     var title: String
     var subtitle: String?
@@ -146,7 +147,10 @@ struct PanelHeader<Trailing: View>: View {
             Image(systemName: symbol).font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
                 .frame(width: 34, height: 34).background(Brand.gradient, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             VStack(alignment: .leading, spacing: 0) {
-                Text(title).font(Brand.display(19, .semibold))
+                HStack(spacing: 8) {
+                    Text(title).font(Brand.display(19, .semibold)).layoutPriority(1)
+                    if showsRecipeSaveMark { RecipeSaveMark() }
+                }
                 if let subtitle { Text(subtitle).font(Brand.caption).foregroundStyle(.secondary) }
             }
             Spacer(minLength: 8)

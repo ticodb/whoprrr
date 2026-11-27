@@ -136,15 +136,22 @@ struct MineView: View {
             if let reason = c.sharingClosedReason { SharingClosedCard(message: "Sharing setups is closed for this key. Reason: \(reason). Everything else in Whoprrr keeps working. Write to hello@whoprrr.app if you think this is a mistake.") }
             if let cook = c.mine?.cook {
                 BrandCard {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(cook.handle).font(Brand.display(17, .semibold)).lineLimit(1)
-                        if let r = cook.rank { StatusChip(text: r, tone: .good) }
+                    HStack(spacing: 16) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(cook.handle).font(Brand.display(17, .semibold)).lineLimit(1)
+                                if let r = cook.rank { StatusChip(text: r, tone: .good) }
+                            }
+                            Text("\(PicklsssWords.cookKeeps(cook.keeps)) · \(PicklsssWords.kitchenDays(cook.kitchenDays))").font(Brand.subheadline).foregroundStyle(.secondary)
+                            Text("Your handle, keeps and kitchen time are public. A keep is someone who took your picklsss and was still using it 7 days later. Kitchen time is the days Whoprrr was running on this Mac and checked in; it is shown beside your rank and earns nothing.")
+                                .font(Brand.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
                         Spacer(minLength: 0)
+                        burger
                     }
-                    Text("\(PicklsssWords.cookKeeps(cook.keeps)) · \(PicklsssWords.kitchenDays(cook.kitchenDays))").font(Brand.subheadline).foregroundStyle(.secondary)
-                    Text("Your handle, keeps and kitchen time are public. A keep is someone who took your picklsss and was still using it 7 days later. Kitchen time is the days Whoprrr was running on this Mac and checked in; it is shown beside your rank and earns nothing.")
-                        .font(Brand.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
+            } else if let progress = c.state.milestones, progress.pickles > 0 || progress.highestRank != nil {
+                burger.frame(maxWidth: .infinity, alignment: .trailing)
             }
             if let f = c.mineFailure { BrandCard { Text(f.message).font(Brand.subheadline).foregroundStyle(Brand.accentText); Button("Try again") { Task { await c.refreshMine() } }.buttonStyle(.brandQuiet) } }
             else if c.mineLoading && c.mine == nil { BrandCard { HStack { ProgressView().controlSize(.small); Text("Looking…").font(Brand.subheadline).foregroundStyle(.secondary) } } }
@@ -160,6 +167,10 @@ struct MineView: View {
         }
         .task { await c.refreshMine() }
         .sheet(item: $downFor) { k in TakeDownSheet(card: k) { Task { await c.refreshMine() } } }
+    }
+
+    private var burger: some View {
+        MilestoneBurger(rank: c.state.milestones?.highestRank, pickles: c.state.milestones?.pickles ?? 0, scale: 0.58)
     }
 
     private func row(_ k: ShelfCard) -> some View {

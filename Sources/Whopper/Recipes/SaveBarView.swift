@@ -31,67 +31,138 @@ struct CookinIndicator: View {
     }
 }
 
-// MARK: Save bar
+// MARK: Recipe save mark and messages
 
-/// Sits at the bottom of the main window on every page: "Cookin'" while settings are being changed, the save bar once they have
-/// been left alone, and the confirmation after saving.
-struct SaveBarArea: View {
-    @EnvironmentObject var bar: SaveBarController
+private struct RecipeSaveMarkKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var showsRecipeSaveMark: Bool {
+        get { self[RecipeSaveMarkKey.self] }
+        set { self[RecipeSaveMarkKey.self] = newValue }
+    }
+}
+
+struct RecipeSaveMark: View {
+    @EnvironmentObject private var bar: SaveBarController
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @EnvironmentObject private var library: PresetLibrary
+    @EnvironmentObject private var presets: PresetActions
+    @EnvironmentObject private var nav: WindowNav
+    @EnvironmentObject private var audio: AudioModel
+    @EnvironmentObject private var windows: WindowModel
+    @EnvironmentObject private var clipboard: ClipboardController
+    @EnvironmentObject private var input: InputController
     @State private var naming = false
+    @State private var filled = false
 
     var body: some View {
         Group {
             switch bar.phase {
-            case .idle: EmptyView()
-            case .changing, .saving: cookin
-            case .unsaved(let recipe, let parts): unsaved(recipe, parts)
-            case .saved(let c): saved(c)
+            case .changing(let recipe):
+                Menu {
+                    Button("Save to \(recipe)") { bar.save() }.keyboardShortcut("s", modifiers: .command)
+                    if let (surface, entry) = presets.editedPreset(on: nav.page, in: library, includeOtherPanels: true) {
+                        Button("Update preset “\(entry.name)” too") { presets.update(entry, on: surface) }
+                    }
+                    Button("Save as new recipe…") { naming = true }
+                    Divider()
+                    Button("Put back") { bar.putBack() }
+                } label: {
+                    Text("Cookin’ · \(recipe)")
+                        .lineLimit(1).truncationMode(.middle)
+                        .font(Brand.caption.weight(.semibold))
+                        .foregroundStyle(Brand.accentText)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Brand.violet.opacity(0.14), in: Capsule())
+                }
+                .menuStyle(.button).buttonStyle(.plain)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(maxWidth: 220)
+                .accessibilityLabel("Cookin’ · \(recipe)")
+            case .saving:
+                HStack(spacing: 6) {
+                    Text("Cookin’…")
+                    Capsule().fill(Brand.violet.opacity(0.23)).frame(width: 24, height: 4)
+                        .overlay(alignment: .leading) {
+                            Capsule().fill(Brand.violetBright).frame(width: filled ? 24 : 1)
+                        }
+                }
+                .font(Brand.caption.weight(.semibold)).foregroundStyle(Brand.accentText)
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(Brand.violet.opacity(0.14), in: Capsule())
+                .accessibilityLabel("Saving recipe")
+                .onAppear {
+                    if reduceMotion { filled = true }
+                    else { withAnimation(.linear(duration: SaveBarController.savingDuration)) { filled = true } }
+                }
+                .onDisappear { filled = false }
+            case .saved where bar.served:
+                Label("Served", systemImage: "checkmark")
+                    .font(Brand.caption.weight(.semibold)).foregroundStyle(StatusChip.Tone.good.text)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(StatusChip.Tone.good.color.opacity(0.12), in: Capsule())
+            default:
+                EmptyView()
             }
         }
-        .animation(.easeOut(duration: 0.15), value: bar.phase)
         .sheet(isPresented: $naming) { SaveAsNewSheet() }
     }
+}
 
-    private var cookin: some View {
-        HStack { CookinLabel(detail: nil); Text(bar.cookinLabel ?? "").font(Brand.caption).foregroundStyle(.secondary); Spacer() }
-            .padding(.horizontal, 12).padding(.vertical, 9)
-            .background(Brand.violet.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .transition(.opacity)
+struct SaveBarArea: View {
+    @EnvironmentObject private var bar: SaveBarController
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Group {
+            if let confirmation = bar.confirmation {
+                saved(confirmation)
+            } else if let recipe = bar.reminderRecipe {
+                reminder(recipe)
+            }
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: bar.confirmation)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: bar.reminderRecipe)
     }
 
-    private func unsaved(_ recipe: String, _ parts: [String]) -> some View {
-        let summary = Text(recipe).fontWeight(.semibold) + Text(" has changes you have not saved: \(parts.joined(separator: ", "))")
+    private func reminder(_ recipe: String) -> some View {
+        let headline = Text(SaveBarController.reminder)
+            .font(Brand.subheadline.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
         let buttons = HStack(spacing: 8) {
-            Button("Save to \(clipped(recipe))") { bar.save() }.buttonStyle(.brand).keyboardShortcut("s", modifiers: .command)
-            Button("Save as new recipe…") { naming = true }.buttonStyle(.brandQuiet)
-            Button("Put back") { bar.putBack() }.buttonStyle(.brandQuiet)
-        }
+            Button("Save to \(recipe)") { bar.save() }.buttonStyle(.brand)
+            Button("Not yet") { bar.dismissReminder() }.buttonStyle(.brandPlain)
+        }.fixedSize()
         return ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) { summary.font(Brand.subheadline).lineLimit(1); Spacer(minLength: 8); buttons }
-            VStack(alignment: .leading, spacing: 10) { summary.font(Brand.subheadline).fixedSize(horizontal: false, vertical: true); buttons }
+            HStack(spacing: 12) { headline; Spacer(minLength: 4); buttons }
+            VStack(alignment: .leading, spacing: 10) { headline; buttons }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Brand.violet.opacity(0.13), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Brand.violetBright.opacity(0.4)))
+        .background(Brand.violet.opacity(0.13), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Brand.violetBright.opacity(0.4)))
         .accessibilityElement(children: .contain)
+        .onAppear { AccessibilityNotification.Announcement(SaveBarController.reminder).post() }
         .transition(.opacity)
     }
 
-    private func saved(_ c: SaveBarController.Confirmation) -> some View {
+    private func saved(_ confirmation: SaveBarController.Confirmation) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-            Text(c.message).font(Brand.subheadline).lineLimit(2)
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(StatusChip.Tone.good.text)
+                .accessibilityHidden(true)
+            Text(confirmation.message).font(Brand.subheadline).lineLimit(2)
             Spacer(minLength: 8)
-            if c.undoRecipeID != nil { Button("Undo") { bar.undoSave() }.buttonStyle(.brandQuiet) }
-            Button { bar.dismissConfirmation() } label: { Image(systemName: "xmark") }.buttonStyle(.plain).foregroundStyle(.secondary).help("Dismiss")
+            if confirmation.undoRecipeID != nil || confirmation.canUndoPreset { Button("Undo") { bar.undoSave() }.buttonStyle(.brandPlain) }
+            Button { bar.dismissConfirmation() } label: { Image(systemName: "xmark") }
+                .buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("Dismiss saved message").help("Dismiss")
         }
         .padding(12)
-        .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(StatusChip.Tone.good.color.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+        .onHover { bar.hoverConfirmation($0) }
+        .onAppear { AccessibilityNotification.Announcement(confirmation.message).post() }
         .transition(.opacity)
     }
-
-    private func clipped(_ name: String) -> String { name.count > 20 ? String(name.prefix(19)) + "…" : name }
 }
 
 // MARK: Left on the stove
