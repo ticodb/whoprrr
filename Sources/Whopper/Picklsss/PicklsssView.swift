@@ -18,6 +18,7 @@ struct PicklsssView: View {
                 if c.route == .mine { MineView() } else { shelf }
             }
         }
+        .onAppear { c.refreshPassIfMissing() }
         .task {
             c.refreshGear()
             await c.refreshNotices()

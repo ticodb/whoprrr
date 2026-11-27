@@ -10,7 +10,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 LOCAL_IDENTITY="Whopper Local Signing"
 VERSION="$(cat VERSION)"
-LABEL="${RELEASE_LABEL-beta 4}"
+LABEL="${RELEASE_LABEL-beta 5}"
 BUILD="${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
 SIGN="${SIGN_IDENTITY-}"
 # Sparkle (automatic updates). The public EdDSA key is safe to commit; the private key lives only in the

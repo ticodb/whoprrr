@@ -15,6 +15,7 @@ struct ExtrasView: View {
         VStack(alignment: .leading, spacing: 14) {
             PanelHeader("Extras", symbol: "plus.rectangle.on.rectangle", subtitle: "Your order and what can be added to it")
             if c.awaitingPurchase && !license.hasPicklsss { waiting }
+            BuyLinkProblem()
             if c.checkStatus == .found {
                 HStack(spacing: 8) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green); Text("Found your order. Picklsss (setups other people shared) is on.").font(Brand.subheadline); Spacer(minLength: 0) }
                     .padding(12).background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -27,7 +28,7 @@ struct ExtrasView: View {
             if !addable.isEmpty {
                 SectionLabel("Add to your order").padding(.top, 4)
                 BrandCard { ForEach(Array(addable.enumerated()), id: \.offset) { i, r in
-                    row(r.title, r.detail, trailing: r.available ? AnyView(Button("Add") { c.openPersonalPage() }.buttonStyle(.brandQuiet).accessibilityLabel("Add \(r.title)")) : AnyView(StatusChip(text: "Not yet", tone: .neutral).fixedSize()))
+                    row(r.title, r.detail, trailing: r.available ? AnyView(Button("Add") { Task { await c.openBuyPage() } }.buttonStyle(.brandQuiet).accessibilityLabel("Add \(r.title)")) : AnyView(StatusChip(text: "Not yet", tone: .neutral).fixedSize()))
                     if i < addable.count - 1 { Divider() }
                 } }
             }
@@ -53,6 +54,7 @@ struct ExtrasView: View {
             }
         }
         .task { await c.refreshMine() }
+        .onAppear { c.refreshPassIfMissing() }
     }
 
     // MARK: What is owned, what can be added
@@ -101,7 +103,7 @@ struct ExtrasView: View {
             Text("Finish in your browser").font(Brand.display(15, .semibold))
             Text("whoprrr.app opened in your browser. Pay there; this window updates by itself when you come back.").font(Brand.subheadline).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
-                Button("Open it again") { c.openPersonalPage() }.buttonStyle(.brandQuiet)
+                Button("Open it again") { Task { await c.openBuyPage() } }.buttonStyle(.brandQuiet).disabled(c.makingLink)
                 Button("Cancel") { c.stopWaiting() }.buttonStyle(.brandQuiet)
             }
         }
@@ -117,7 +119,7 @@ struct ExtrasView: View {
                 Button(c.checkStatus == .checking ? "Checking…" : "Check now") { Task { await c.checkNow() } }.buttonStyle(.brandQuiet).disabled(c.checkStatus == .checking)
             }
             switch c.checkStatus {
-            case .notYet: Text("Nothing found yet. If you have just paid, give it a moment and press Check now again. The receipt email also carries your key, if you would rather enter it.").font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            case .notYet: Text(PurchaseWords.notYet).font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             default: Text("Whoprrr asks for a fresh pass when you press this, and by itself when you come back from paying. Nothing to restart.").font(Brand.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }

@@ -106,7 +106,7 @@ public enum RenewOutcome: Equatable, Sendable {
 }
 
 public enum LicenseReplies {
-    struct Body: Decodable { var pass: String?; var slot: Int?; var of: Int?; var error: String?; var message: String? }
+    struct Body: Decodable { var pass: String?; var slot: Int?; var of: Int?; var url: String?; var error: String?; var message: String? }
     static func parse(_ data: Data?) -> Body? { data.flatMap { try? JSONDecoder().decode(Body.self, from: $0) } }
 
     /// Fallback wording when the server sent a code without a message. Plain words: these are key screens.
