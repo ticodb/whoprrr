@@ -4,7 +4,6 @@ import WhopperKit
 /// Shown in place of the app while this Mac has no valid pass. Plain words only: this is a key screen.
 struct LicenseView: View {
     @ObservedObject var license = LicenseController.shared
-    @EnvironmentObject var nav: WindowNav
     @State private var key = ""
     @FocusState private var focused: Bool
 
@@ -18,8 +17,7 @@ struct LicenseView: View {
         }
         .padding(40)
         .frame(maxWidth: 520)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .frame(minWidth: 860, minHeight: 620)
+        .frame(maxWidth: .infinity)
         .tint(Brand.violetBright)
     }
 
@@ -62,11 +60,7 @@ struct LicenseView: View {
     private func activate() {
         Task {
             await license.activate(key: key)
-            guard license.isLicensed else { return }
-            key = ""
-            // A first activation leads into the gear scan, once.
-            let welcomed = "gg.tico.whoprrr.welcomed"
-            if !UserDefaults.standard.bool(forKey: welcomed) { UserDefaults.standard.set(true, forKey: welcomed); nav.page = .welcome }
+            if license.isLicensed { key = "" }
         }
     }
 }

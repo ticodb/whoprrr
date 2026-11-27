@@ -24,13 +24,15 @@ Or, in Terminal: `xattr -dr com.apple.quarantine /Applications/Whoprrr.app`
 
 You only need to do this once per downloaded version. If you would rather not run an unnotarized app, [build it yourself](building.md): it is a few commands.
 
-Whoprrr lives in the menu bar (no Dock icon unless its window is open). The first time, it opens its window on **Permissions**.
+Whoprrr lives in the menu bar (no Dock icon unless its window is open). On first launch it opens Setup.
 
-## 3. Grant permissions
+## 3. Set up this Mac
 
-Turn on only the features you use; each asks only for what it needs. [What each permission is for →](permissions.md)
+Activate with the key from your receipt. Choose **Scan my setup** to review a recipe for the gear connected to this Mac. The recipe lists the grants its switched-on lines need. **Set up by hand** goes straight to Features.
 
-Because beta builds are ad-hoc signed, macOS treats every new version as a new app and asks again. If a permission looks granted but does nothing after an update, switch it off and on again in System Settings, or run `tccutil reset All gg.tico.whopper` and grant again.
+Setup remembers where you stopped. Follow the guide for each grant, then try the features in **Taste test**. If you skip a grant, its features stay off with their settings saved. The menu bar offers **Continue** when you’re ready. [What each grant is for](permissions.md)
+
+On the first launch of a new build, Whoprrr checks what it can quietly. It opens a renewal window if a grant needs attention. System Audio Recording needs a chime you start yourself.
 
 ## 4. Optional: the virtual microphone
 

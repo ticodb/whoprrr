@@ -3,6 +3,7 @@ import CoreGraphics
 import AudioCore
 import WindowCore
 import InputCore
+import LogitechCore
 import WhopperKit
 
 /// Reads the gear connected right now into a `GearScan`. Read-only: display reach comes from the brightness read the display
@@ -28,7 +29,9 @@ enum GearScanner {
         }
         let audio = Shared.audio.devices.filter { !$0.isWhopperInternal && $0.transport != .virtual && $0.transport != .aggregate }
             .map { GearScan.Audio(uid: $0.uid, name: $0.name, transport: $0.transport.rawValue, hasInput: $0.hasInput, hasOutput: $0.hasOutput) }
-        let logi = Shared.input.logiDevices.map { $0.name.trimmingCharacters(in: .whitespaces) }
+        let live = Shared.input.logiDevices.map { $0.name.trimmingCharacters(in: .whitespaces) }
+        // Enumerate device names without opening HID interfaces or listening for input.
+        let logi = live.isEmpty ? Set(LogitechDiscovery.channels().map(\.info.product)).filter { !$0.isEmpty }.sorted() : live
         return GearScan(mac: mac, screens: screens, audio: audio, logitech: logi)
     }
 
@@ -48,13 +51,17 @@ enum GearScanner {
 enum Starter {
     struct Applied { var recipeID: UUID; var name: String; fileprivate var backup: [String: Data] }
 
-    static func apply(_ plan: StarterPlan, accepted: Set<String>) -> Applied {
+    static func apply(_ plan: StarterPlan, accepted: Set<String>, firstSetup: Bool = false, name: String? = nil) -> Applied {
         let recipes = Shared.recipes
         let backup = recipes.snapshot(recipes.surfaceKeys)
         let lines = plan.lines.filter { accepted.contains($0.id) }
 
-        for o in plan.off { Shared.features.setEnabled(o.feature, false) }
-        for f in Set(lines.map(\.feature)) { Shared.features.setEnabled(f, true) }
+        let selected = Set(lines.map(\.feature))
+        if firstSetup { Shared.features.setEnabled(selected) }
+        else {
+            for o in plan.off { Shared.features.setEnabled(o.feature, false) }
+            for f in selected { Shared.features.setEnabled(f, true) }
+        }
 
         var windows = Shared.windows.settings
         var audio = Shared.audio.settings
@@ -67,6 +74,8 @@ enum Starter {
                 windows.drawerActions = Set(valid.prefix(WindowSettings.drawerLimit))
             case .displayControl, .clipboard:
                 break       // switching the feature on is the whole change
+            case .outputEQ:
+                audio.eq.enabled = true
             case .keepAwake(let uid):
                 var k = audio.keepAlive[uid] ?? KeepAliveSettings()
                 k.enabled = true
@@ -75,6 +84,7 @@ enum Starter {
                 pinned.append(uid)
             case .micSource(let uid):
                 audio.mic.sourceUID = uid
+                if firstSetup { audio.mic.enabled = true }
             case .inputPreset(let id):
                 if let p = InputPresets.all.first(where: { $0.id == id }) { input = InputPresets.apply(p, to: input) }
             }
@@ -87,7 +97,7 @@ enum Starter {
         Shared.input.settings = input
 
         let gear = Gear.current()
-        let name = StarterRecipes.uniqueName(plan.name, existing: recipes.recipes.map(\.name))
+        let name = name ?? StarterRecipes.uniqueName(plan.name, existing: recipes.recipes.map(\.name))
         let wanted: Set<String> = ["features", "windows", "audio", "input", "clipboard"]
         let r = recipes.create(name: name, symbol: plan.symbol, includes: wanted.intersection(recipes.surfaceKeys), devices: gear, autoApply: !gear.isEmpty)
         recipes.notice = nil

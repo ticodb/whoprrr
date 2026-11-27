@@ -42,7 +42,9 @@ hidutil property --set '{"UserKeyMapping":[]}'
 - **Display → Log** lists every command and whether it was read back and verified.
 
 ## Permissions look granted but nothing works after an update
-Beta builds are ad-hoc signed, so macOS sees each version as new. Toggle the permission off and on, or `tccutil reset All gg.tico.whopper` and grant again.
+Ad-hoc beta builds can lose grants on update. The renewal window lists the grants that need attention. You can also open **Permissions** or choose **Continue** in the menu bar.
+
+If the switch is on and the taste test still fails, choose **Reset and ask again**. It clears that one grant for Whoprrr. If macOS refuses the reset, turn the switch off and on in System Settings. For Input Monitoring, choose **Quit & Reopen**. If a feature still fails, park it and use **Copy diagnostics**.
 
 ## Start over
 Quit Whoprrr and delete `~/Library/Application Support/Whopper` (rules, recipes, presets, clipboard history), or run `scripts/uninstall.sh`.

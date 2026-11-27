@@ -24,8 +24,14 @@ public final class FeatureStore: ObservableObject {
     /// Unbuilt features cannot be enabled.
     public func setEnabled(_ f: Feature, _ on: Bool) {
         guard f.isBuilt || !on else { return }
-        if on { enabled.insert(f) } else { enabled.remove(f) }
-        defaults.set(enabled.map(\.rawValue).sorted(), forKey: key)
+        setEnabled(on ? enabled.union([f]) : enabled.subtracting([f]))
+    }
+
+    public func setEnabled(_ selection: Set<Feature>) {
+        let available = selection.filter(\.isBuilt)
+        guard enabled != available else { return }
+        enabled = available
+        defaults.set(available.map(\.rawValue).sorted(), forKey: key)
     }
 
     /// Enabled features in catalogue order, for stable UI.

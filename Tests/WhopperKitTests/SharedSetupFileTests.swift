@@ -140,7 +140,7 @@ final class SharedSetupTableDriftTests: XCTestCase {
 
     func testTheBandKindsAreTheAppsOwn() { XCTAssertEqual(T.bandKinds, BiquadCoefficients.Kind.allCases.map(\.rawValue)) }
 
-    func testThePermissionNamesAreTheAppsOwn() { XCTAssertEqual(T.permissions, Permission.allCases.map(\.rawValue)) }
+    func testThePermissionNamesAreTheAppsOwn() { XCTAssertEqual(T.permissions, Permission.sharedSetupCases.map(\.rawValue)) }
 
     func testTheKeyboardLayoutNamesAreTheAppsOwn() { XCTAssertEqual(T.layouts, KeyboardLayout.allCases.map(\.rawValue)) }
 

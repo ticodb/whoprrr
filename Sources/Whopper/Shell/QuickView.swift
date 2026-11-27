@@ -14,6 +14,7 @@ struct QuickView: View {
     @EnvironmentObject var clipboard: ClipboardController
     @EnvironmentObject var display: AppModel
     @EnvironmentObject var recipes: RecipeStore
+    @ObservedObject private var setup = SetupController.shared
     @ObservedObject private var updates = UpdateController.shared
     @State private var missing: [Permission] = []
     private let checker: PermissionChecking = LivePermissionChecker()
@@ -22,13 +23,16 @@ struct QuickView: View {
         VStack(alignment: .leading, spacing: 10) {
             header
             recipeRow
-            if !missing.isEmpty { permissionBanner }
-            if features.isEnabled(.remap) { keysRow }
-            if features.isEnabled(.clipboard) { clipboardRow }
-            if features.isEnabled(.windows) { windowsRow }
-            if features.isEnabled(.audio) { outputRow; inputRow }
-            if features.isEnabled(.microphone) { micRow }
-            if features.isEnabled(.display) { displayRow }
+            if setup.progress.step != .complete || !setup.parkedFeatures.isEmpty { setupReminder }
+            else if !missing.isEmpty { permissionBanner }
+            if setup.updateOK { Text("Updated to \(AppInfo.version). Everything was checked and still works.").font(Brand.caption).foregroundStyle(.secondary) }
+            let runtime = SetupController.allowed(features.enabled, progress: setup.progress, auditing: setup.auditing)
+            if runtime.contains(.remap) { keysRow }
+            if runtime.contains(.clipboard) { clipboardRow }
+            if runtime.contains(.windows) { windowsRow }
+            if runtime.contains(.audio) { outputRow; inputRow }
+            if runtime.contains(.microphone) { micRow }
+            if runtime.contains(.display) { displayRow }
             footer
         }
         .padding(16)
@@ -51,6 +55,20 @@ struct QuickView: View {
             Spacer()
             Button { Shared.showWindow() } label: { Image(systemName: "gearshape").font(.system(size: 16, weight: .medium)) }
                 .buttonStyle(.plain).help("Settings (⌘,)").foregroundStyle(Brand.accentText)
+        }
+    }
+
+    private var setupReminder: some View {
+        BrandCard {
+            HStack {
+                let names = TasteTest.names(setup.parkedGrants)
+                Text(names.isEmpty ? "Finish setup" : "Finish setup · \(names)").font(Brand.subheadline)
+                Spacer()
+                Button("Continue") {
+                    if setup.progress.step == .complete { setup.continueParked() }
+                    else { setup.openWindow() }
+                }.buttonStyle(.brandQuiet)
+            }
         }
     }
 
@@ -208,7 +226,8 @@ struct QuickView: View {
 
     private func refreshPermissions() {
         // Camera and Microphone ask by themselves the first time they are used, so "not asked yet" is not a problem.
-        missing = features.neededPermissions.sorted { $0.title < $1.title }.filter { p in
+        let grants = Set(setup.requirements(for: features.enabled).values.flatMap { $0 })
+        missing = grants.sorted { $0.title < $1.title }.filter { p in
             let s = checker.status(p)
             return s == .denied || (s == .notDetermined && p != .camera && p != .microphone)
         }

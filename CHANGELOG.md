@@ -2,6 +2,11 @@
 
 All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://semver.org); betas are labelled `0.9.0 beta N`.
 
+## Unreleased
+
+- **Setup** takes this Mac from activation through a gear scan, recipe, permission guide and taste test in one window. It picks up where you left off and keeps the settings of any parked feature.
+- **After an update**, Whoprrr checks permissions quietly and offers to renew only the grants that need attention. System Audio Recording is checked when you play the setup chime. **Reset and ask again** clears a single supported grant for Whoprrr.
+
 ## 0.9.0 beta 5: buy Picklsss straight from the app
 
 Released 2026-11-27.

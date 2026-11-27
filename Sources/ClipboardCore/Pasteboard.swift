@@ -37,6 +37,7 @@ public final class PasteboardWatcher {
         lastCount = pb.changeCount
         let s = settings()
         guard s.enabled else { return }
+        if #available(macOS 15.4, *), pb.accessBehavior != .alwaysAllow { return }
         let front = NSWorkspace.shared.frontmostApplication
         let types = (pb.types ?? []).map(\.rawValue)
         if CaptureRules.shouldSkip(types: types, frontBundle: front?.bundleIdentifier, settings: s) { skipped += 1; return }

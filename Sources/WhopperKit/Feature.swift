@@ -2,8 +2,13 @@ import Foundation
 
 /// A macOS privacy grant a feature may need. Features declare these so the
 /// Permissions page can say who needs what, and ask only for what is enabled.
-public enum Permission: String, CaseIterable, Sendable, Identifiable {
-    case accessibility, inputMonitoring, camera, microphone, systemAudio
+public enum Permission: String, CaseIterable, Sendable, Identifiable, Codable {
+    case accessibility, inputMonitoring, camera, microphone, systemAudio, paste, micDriver
+
+    /// Grants represented by the existing shared-setup file format.
+    static var sharedSetupCases: [Self] { allCases.filter { $0 != .paste && $0 != .micDriver } }
+
+    public static var setupOrder: [Self] { [.accessibility, .inputMonitoring, .systemAudio, .paste, .microphone, .micDriver, .camera] }
     public var id: String { rawValue }
 
     public var title: String {
@@ -13,6 +18,8 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
         case .camera: "Camera"
         case .microphone: "Microphone"
         case .systemAudio: "System Audio Recording"
+        case .paste: "Paste from Other Apps"
+        case .micDriver: "Whoprrr Mic driver"
         }
     }
 
@@ -23,7 +30,9 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
         case .inputMonitoring: "See keyboard and mouse input so remaps can apply."
         case .camera: "Match the two displays by looking at both with a camera. Frames are never saved."
         case .microphone: "Process and route the microphone."
-        case .systemAudio: "Capture the system mix so the equalizer can process it."
+        case .systemAudio: "Pass what your apps play through the equalizer. Audio is not recorded."
+        case .paste: "Read copied items in the background so they appear in clipboard history."
+        case .micDriver: "Send your processed microphone to other apps. Installing it needs your Mac password."
         }
     }
 
@@ -36,8 +45,21 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
         case .camera: pane = "Privacy_Camera"
         case .microphone: pane = "Privacy_Microphone"
         case .systemAudio: pane = "Privacy_AudioCapture"
+        case .paste: pane = "Privacy_Pasteboard"
+        case .micDriver: return URL(string: "x-apple.systempreferences:com.apple.Sound-Settings.extension")!
         }
         return URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")!
+    }
+    /// The single TCC service that can be cleared for this app's own bundle.
+    public var resetService: String? {
+        switch self {
+        case .accessibility: "Accessibility"
+        case .inputMonitoring: "ListenEvent"
+        case .systemAudio: "AudioCapture"
+        case .microphone: "Microphone"
+        case .camera: "Camera"
+        case .paste, .micDriver: nil
+        }
     }
 }
 
@@ -93,10 +115,10 @@ public enum Feature: String, CaseIterable, Sendable, Identifiable, Codable {
         switch self {
         case .display: [.camera]
         case .windows: [.accessibility]
-        case .clipboard: []
+        case .clipboard: if #available(macOS 15.4, *) { [.paste] } else { [] }
         case .remap: [.accessibility, .inputMonitoring]
         case .audio: [.systemAudio]
-        case .microphone: [.microphone]
+        case .microphone: [.microphone, .micDriver]
         }
     }
 

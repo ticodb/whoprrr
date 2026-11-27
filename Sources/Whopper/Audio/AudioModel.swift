@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import AudioCore
+import AVFoundation
 import WhopperKit
 
 @MainActor
@@ -12,7 +13,12 @@ final class AudioModel: ObservableObject {
     let eqEngine: OutputEQEngine
     let micEngine: MicEngine
     private var cancelObserve: (@Sendable () -> Void)?
-    private(set) var active = false
+    private var audioActive = false
+    private var micActive = false
+    private var testingEQ = false
+    private var testingMic = false
+    private(set) var processedPeak: Float = 0
+    private(set) var latestMicSignal: Float = 0
 
     @Published var settings: AudioSettings { didSet { if settings != oldValue { settingsChanged() } } }
     @Published private(set) var devices: [AudioDeviceInfo] = []
@@ -37,10 +43,24 @@ final class AudioModel: ObservableObject {
         micEngine = MicEngine(system: system)
         settings = store.load(default: AudioSettings())
         micEngine.onState = { [weak self] st in Task { @MainActor in self?.micState = st; self?.updatePin() } }
-        micEngine.onLevels = { [weak self] i, o in Task { @MainActor in self?.micLevels = (i, o) } }
+        micEngine.onLevels = { [weak self] i, o in
+            Task { @MainActor in
+                self?.micLevels = (i, o)
+                if let self, self.testingMic { self.latestMicSignal = max(self.latestMicSignal, i) }
+            }
+        }
         eqEngine.onState = { [weak self] st in Task { @MainActor in self?.eqState = st } }
         eqEngine.onLevel = { [weak self] l in Task { @MainActor in self?.eqLevel = l } }
-        eqEngine.onPermissionVerified = { [weak self] in Task { @MainActor in self?.settings.eq.permissionVerified = true } }
+        eqEngine.onProcessedLevel = { [weak self] level in
+            Task { @MainActor in
+                if let self, self.testingEQ { self.processedPeak = max(self.processedPeak, level) }
+            }
+        }
+        eqEngine.onPermissionVerified = { [weak self] in
+            Task { @MainActor in
+                if let self, !self.testingEQ && self.audioActive { self.settings.eq.permissionVerified = true }
+            }
+        }
         micEngine.rack.onStatus = { [weak self] st in Task { @MainActor in self?.mergePluginStatus(st) } }
         eqEngine.rack.onStatus = { [weak self] st in Task { @MainActor in self?.mergePluginStatus(st) } }
         pinner.onStatus = { [weak self] s in Task { @MainActor in self?.pinStatus = s; self?.defaultInputUID = s.activeUID } }
@@ -58,50 +78,86 @@ final class AudioModel: ObservableObject {
             .sorted { ($0.transport == .bluetooth ? 0 : 1, $0.name) < ($1.transport == .bluetooth ? 0 : 1, $1.name) }
     }
 
-    func setActive(_ on: Bool) {
-        guard on != active else { return }
-        active = on
-        if on {
-            refreshDevices()
-            cancelObserve = system.observe { [weak self] in Task { @MainActor in self?.refreshDevices() } }
-            applySettings()
-        } else {
-            cancelObserve?(); cancelObserve = nil
-            pinner.stop(); keepAlive.stop(); eqEngine.stop(); micEngine.stop()
-            pinStatus = nil; keepAliveStatus = [:]
-        }
+    func startDevices() {
+        guard cancelObserve == nil else { return }
+        refreshDevices()
+        cancelObserve = system.observe { [weak self] in Task { @MainActor in self?.refreshDevices() } }
     }
 
-    private func refreshDevices() {
+    func setActive(audio: Bool, mic: Bool) {
+        guard audio != audioActive || mic != micActive else { return }
+        audioActive = audio
+        micActive = mic
+        applySettings()
+    }
+
+    func refreshDevices() { Task { await readDevices() } }
+
+    func readDevices() async {
         let sys = system
-        Task.detached { [self] in
-            let list = sys.devices(), din = sys.defaultInputUID(), dout = sys.defaultOutputUID()
-            await MainActor.run {
-                self.devices = list; self.defaultInputUID = din; self.defaultOutputUID = dout
-                var s = self.settings
-                for d in list { s.knownNames[d.uid] = d.name }
-                if s != self.settings { self.settings = s }
-            }
-        }
+        let (list, din, dout) = await Task.detached { (sys.devices(), sys.defaultInputUID(), sys.defaultOutputUID()) }.value
+        devices = list
+        defaultInputUID = din
+        defaultOutputUID = dout
+        var named = settings
+        for device in list { named.knownNames[device.uid] = device.name }
+        if named != settings { settings = named }
+    }
+
+    func beginEQTest() {
+        processedPeak = 0
+        testingEQ = true
+        applySettings()
+    }
+
+    func endEQTest() {
+        guard testingEQ else { return }
+        testingEQ = false
+        applySettings()
+    }
+
+    func beginMicTest() {
+        latestMicSignal = 0
+        testingMic = true
+        applySettings()
+    }
+
+    func endMicTest() {
+        guard testingMic else { return }
+        testingMic = false
+        applySettings()
     }
 
     private func settingsChanged() {
         store.save(settings)
-        if active { applySettings() }
+        applySettings()
     }
 
     private func applySettings() {
         updatePin()
-        keepAlive.apply(settings.keepAlive)
-        eqEngine.apply(settings.eq)
-        micEngine.apply(settings.mic)
+        if audioActive { keepAlive.apply(settings.keepAlive) } else { keepAlive.stop() }
+        if testingEQ {
+            var test = settings.eq
+            test.enabled = true
+            test.permissionVerified = false
+            test.plugins = []
+            eqEngine.apply(test)
+        } else if audioActive { eqEngine.apply(settings.eq) } else { eqEngine.stop() }
+        if testingMic {
+            var test = settings.mic
+            test.enabled = true
+            test.plugins = []
+            micEngine.apply(test)
+        } else if micActive, LivePermissionChecker().status(.microphone) == .granted {
+            micEngine.apply(settings.mic)
+        } else { micEngine.stop() }
     }
 
     /// While the mic engine runs, the system input is Whoprrr Mic (falling back to the physical mic if it stops).
     private func updatePin() {
-        guard active else { return }
-        var policy = settings.inputPin
-        if settings.mic.enabled, case .running = micState {
+        guard audioActive || micActive else { pinner.stop(); pinStatus = nil; return }
+        var policy = audioActive ? settings.inputPin : InputPinPolicy()
+        if micActive, settings.mic.enabled, case .running = micState {
             policy.enabled = true
             policy.preferredUIDs = [WhopperMic.uid] + policy.preferredUIDs
         }
@@ -153,6 +209,11 @@ final class AudioModel: ObservableObject {
     func enableMic(_ on: Bool) {
         if on, settings.mic.sourceUID == nil { settings.mic.sourceUID = pinnedUID ?? inputDevices.first { $0.transport == .usb }?.uid ?? inputDevices.first?.uid }
         settings.mic.enabled = on
+        if on && micActive && LivePermissionChecker().status(.microphone) == .notDetermined {
+            Task {
+                if await AVCaptureDevice.requestAccess(for: .audio) { applySettings() }
+            }
+        }
     }
 
     func setPinned(_ uid: String?) {

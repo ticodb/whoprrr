@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import ApplicationServices
 import AVFoundation
 import IOKit.hid
@@ -23,7 +24,15 @@ public struct LivePermissionChecker: PermissionChecking {
             }
         case .camera: return Self.map(AVCaptureDevice.authorizationStatus(for: .video))
         case .microphone: return Self.map(AVCaptureDevice.authorizationStatus(for: .audio))
-        case .systemAudio: return .unknown
+        case .systemAudio, .micDriver: return .unknown
+        case .paste:
+            guard #available(macOS 15.4, *) else { return .granted }
+            switch NSPasteboard.general.accessBehavior {
+            case .alwaysAllow: return .granted
+            case .alwaysDeny: return .denied
+            case .default, .ask: return .notDetermined
+            @unknown default: return .unknown
+            }
         }
     }
 
@@ -56,7 +65,7 @@ public enum PermissionRequester {
             AVCaptureDevice.requestAccess(for: .video) { _ in }
         case .microphone:
             AVCaptureDevice.requestAccess(for: .audio) { _ in }
-        case .systemAudio:
+        case .systemAudio, .paste, .micDriver:
             break   // granted by the first tap; no API to ask ahead of time
         }
     }
