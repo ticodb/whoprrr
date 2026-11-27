@@ -39,6 +39,13 @@ struct MainWindowView: View {
                     .frame(maxWidth: 680 + 56, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .overlay(alignment: .top) {
+                if let milestone = picklsss.milestone {
+                    PicklsssMilestoneView(milestone: milestone)
+                        .id(milestone.id)
+                        .padding(.top, 76)
+                }
+            }
         }
         .frame(minWidth: 860, minHeight: 620)
         .tint(Brand.violetBright)

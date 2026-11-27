@@ -89,6 +89,24 @@ enum DebugDriver {
         case "preset-undo":
             Shared.saveBar.undoSave()
             emit("preset undo: preamp=\(Shared.audio.eqProfile.preampDB)")
+        case "milestone-show":
+            let rank = CookRank(shelfName: s["rank"] as? String)
+            let count = s["pickles"] as? Int ?? 0
+            let kind: PicklsssMilestone.Kind
+            switch str("kind") {
+            case "rank":
+                guard let rank else { emit("milestone: missing rank"); return }
+                kind = .rank(rank)
+            case "keep": kind = .firstKeep
+            case "first-take": kind = .firstTake(title: str("title"), inRecipes: true)
+            case "ten": kind = .tenTakes
+            case "twenty-five": kind = .twentyFiveTakes
+            case "fifty": kind = .fiftyTakes
+            default: kind = .pickle
+            }
+            let sample = PicklsssMilestone(kind: kind, rank: rank, pickles: count)
+            c.showDebugMilestone(sample)
+            emit("milestone: \(sample.title), rank=\(rank?.name ?? "-"), pickles=\(count)")
         case "say": emit("\(str("what")): \(describe())")
         case "shelf":
             if let t = s["tab"] as? String, let tab = PicklsssController.BrowseTab(rawValue: t) { c.tab = tab }
@@ -221,6 +239,11 @@ enum DebugDriver {
             StoveReminder(); NoticesBar(); PageContent(page: Shared.nav.page).environment(\.showsRecipeSaveMark, true)
             SaveBarArea()
         }.padding(28).frame(width: 680 + 56, alignment: .topLeading)
+            .overlay(alignment: .top) {
+                if let milestone = c.milestone {
+                    PicklsssMilestoneView(milestone: milestone).padding(.top, 76)
+                }
+            }
         write(Shared.wrap(page).tint(Brand.violetBright), name, 680 + 56, nil)
         if let preview = presetPreview, let surface = PresetSurfaces.surface(preview.key) {
             let groups = surface.groups(in: Shared.presets)

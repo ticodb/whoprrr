@@ -82,8 +82,16 @@ public struct PicklsssState: Codable, Equatable, Sendable {
     public var lastDaily: Date?
     /// Why sharing is closed for this key, in the owner's words, once the shelf said so.
     public var sharingClosedReason: String?
+    public var milestones: MilestoneProgress?
 
     public init() {}
+
+    /// A file from before milestones starts from the history it already has.
+    public mutating func prepareMilestones() {
+        if milestones == nil {
+            milestones = MilestoneProgress(previousTakes: takes.count, previousShares: shared.count)
+        }
+    }
 
     public func take(for picklsssId: String) -> TakeRecord? { takes.first { $0.picklsssId == picklsssId } }
     public func take(forRecipe id: UUID) -> TakeRecord? { takes.first { $0.recipeID == id } }

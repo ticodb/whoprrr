@@ -37,7 +37,9 @@ final class PicklsssController: ObservableObject {
 
     // What is open
     @Published var take: TakeSession?
-    @Published var sharing: ShareSession?
+    @Published var sharing: ShareSession? {
+        didSet { if sharing == nil { presentNextMilestone() } }
+    }
     @Published var fileProblem: FileProblem?
 
     // The lock
@@ -54,6 +56,10 @@ final class PicklsssController: ObservableObject {
     @Published private(set) var mine: ShelfMine?
     @Published private(set) var mineFailure: ShelfFailure?
     @Published private(set) var mineLoading = false
+    @Published private(set) var milestone: PicklsssMilestone?
+    private var milestoneWindowOpen = false
+    private var cancelMilestone: (() -> Void)?
+    private let milestoneScheduler = MainQueueScheduler()
 
     struct FileProblem: Identifiable { let id = UUID(); var name: String; var title: String; var why: String; var violations: [String]; var tampered: Bool }
 
@@ -72,6 +78,10 @@ final class PicklsssController: ObservableObject {
 
     /// Call once at launch, after the recipes are registered.
     func start() {
+        if state.milestones == nil { save { $0.prepareMilestones() } }
+        Shared.nav.$windowOpen.removeDuplicates().sink { [weak self] open in
+            self?.milestoneWindowDidChange(open)
+        }.store(in: &bag)
         recipes.$recipes.sink { [weak self] _ in DispatchQueue.main.async { self?.recomputeNotices() } }.store(in: &bag)
         recipes.$activeID.sink { [weak self] _ in DispatchQueue.main.async { self?.noteActive() } }.store(in: &bag)
         becameActive = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
@@ -96,6 +106,43 @@ final class PicklsssController: ObservableObject {
     }
 
     private func save(_ change: (inout PicklsssState) -> Void) { var s = state; change(&s); state = s; store.save(s) }
+
+    // MARK: Celebrations
+
+    private func milestoneWindowDidChange(_ open: Bool) {
+        milestoneWindowOpen = open
+        if open {
+            presentNextMilestone()
+        } else {
+            cancelMilestone?()
+            cancelMilestone = nil
+            milestone = nil
+        }
+    }
+
+    private func presentNextMilestone() {
+        guard milestoneWindowOpen, milestone == nil, sharing == nil else { return }
+        var nextState = state
+        guard let next = nextState.milestones?.next(windowOpen: true), store.save(nextState) else { return }
+        // Claim the celebration on disk before presenting it so reopening or relaunching cannot replay it.
+        state = nextState
+        showMilestone(next)
+    }
+
+    private func showMilestone(_ next: PicklsssMilestone) {
+        cancelMilestone?()
+        milestone = next
+        cancelMilestone = milestoneScheduler.schedule(after: next.duration) { [weak self] in
+            guard let self else { return }
+            self.milestone = nil
+            self.cancelMilestone = nil
+            self.presentNextMilestone()
+        }
+    }
+
+    #if DEBUG
+    func showDebugMilestone(_ next: PicklsssMilestone) { showMilestone(next) }
+    #endif
 
     // MARK: Calls with the pass
 
@@ -244,6 +291,8 @@ final class PicklsssController: ObservableObject {
 
     func record(_ t: TakeRecord) {
         save { s in
+            s.prepareMilestones()
+            s.milestones?.recordTake(title: t.title, inRecipes: t.recipeID != nil)
             if let i = s.takes.firstIndex(where: { $0.picklsssId == t.picklsssId }) {
                 var old = s.takes[i]
                 // Taking again keeps the first take's token and counting; only a recipe it lost is replaced.
@@ -253,6 +302,7 @@ final class PicklsssController: ObservableObject {
                 s.takes[i] = old
             } else { s.takes.append(t) }
         }
+        presentNextMilestone()
         noteActive()
     }
 
@@ -333,6 +383,8 @@ final class PicklsssController: ObservableObject {
             let m = try await withPass { c, p in try await c.mine(pass: p) }
             mine = m
             save { s in
+                s.prepareMilestones()
+                s.milestones?.observeCook(m.cook, sharedCount: m.picklsss.count)
                 if let c = m.cook { s.handle = c.handle; s.sharingClosedReason = c.sharingClosed?.reason }
                 for card in m.picklsss {
                     if let i = s.shared.firstIndex(where: { $0.picklsssId == card.id }) {
@@ -343,6 +395,7 @@ final class PicklsssController: ObservableObject {
                     }
                 }
             }
+            presentNextMilestone()
             // The first accepted setup switches the extra on for the purchase; the pass learns at its next renewal, so ask for one.
             if state.hasPublicSetup, !hasExtra { await checkNow() }
         } catch let e as ShelfFailure { mineFailure = e } catch is CancellationError {} catch { mineFailure = .offline }
@@ -351,7 +404,16 @@ final class PicklsssController: ObservableObject {
     var sharingClosedReason: String? { mine?.cook?.sharingClosed?.reason ?? state.sharingClosedReason }
 
     func recordShared(_ r: SharedRecord) {
-        save { s in if let i = s.shared.firstIndex(where: { $0.picklsssId == r.picklsssId }) { s.shared[i] = r } else { s.shared.append(r) } }
+        save { s in
+            s.prepareMilestones()
+            s.milestones?.recordShare()
+            if let i = s.shared.firstIndex(where: { $0.picklsssId == r.picklsssId }) {
+                s.shared[i] = r
+            } else {
+                s.shared.append(r)
+            }
+        }
+        presentNextMilestone()
     }
     func rememberHandle(_ h: String) { save { $0.handle = h } }
     func updateVersion(_ id: String, _ version: Int) { save { s in if let i = s.takes.firstIndex(where: { $0.picklsssId == id }) { s.takes[i].version = version } } }
