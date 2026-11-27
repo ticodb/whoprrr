@@ -3,6 +3,7 @@ import DisplayCore
 
 /// The external displays module panel. The shell supplies padding, width and Quit.
 struct DisplayPanel: View {
+    @Environment(\.showsRecipeSaveMark) private var showsRecipeSaveMark
     @EnvironmentObject var m: AppModel
     @State private var tab = Tab(rawValue: ProcessInfo.processInfo.environment["SDC_TAB"] ?? "") ?? Tab.control
     enum Tab: String, CaseIterable { case control = "Control", pattern = "Match", presets = "Presets", learn = "Learn", diagnostics = "Log" }
@@ -33,6 +34,7 @@ struct DisplayPanel: View {
         HStack {
             Image(systemName: "display").font(Brand.title3)
             Text("External displays").font(Brand.headline)
+            if showsRecipeSaveMark { RecipeSaveMark() }
             Spacer()
             if m.transportKind == .fake {
                 Text("FAKE TRANSPORT").font(Brand.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2)

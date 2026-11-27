@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Quieter recipe saves**: the page title shows “Cookin’” and the recipe name while you make changes. Open it to save, make a new recipe, or put things back. Press ⌘S anywhere in the main window to save. A reminder appears when you leave a page, and “Not yet” keeps it away until the next change. The saved message offers Undo for four seconds and stays while you hover over it. The recipe menu still keeps the previous saved version.
+
 All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://semver.org); betas are labelled `0.9.0 beta N`.
 
 ## 0.9.0 beta 8: make it a combo from the app

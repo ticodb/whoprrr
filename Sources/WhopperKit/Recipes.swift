@@ -362,6 +362,12 @@ public final class RecipeStore: ObservableObject {
             .sorted { (title(forPart: $0), $0) < (title(forPart: $1), $1) }
     }
 
+    func canonicalSnapshot(_ sections: [String: Data]) -> [String: Data] {
+        sections.reduce(into: [:]) { result, entry in
+            result[entry.key] = surfaces[entry.key]?.canonicalRecipeData(entry.value) ?? entry.value
+        }
+    }
+
     /// Titles of `changedParts`.
     public func changedPartTitles(live: [String: Data]? = nil) -> [String] { changedParts(live: live).map(title(forPart:)) }
 

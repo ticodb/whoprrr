@@ -13,7 +13,12 @@ enum Shared {
     static let clipboard = ClipboardController()
     static let input = InputController()
     private static var bag = Set<AnyCancellable>()
-    static let nav = WindowNav()
+    static let nav: WindowNav = {
+        let nav = WindowNav()
+        nav.onPageChange = { saveBar.pageDidChange() }
+        nav.onClose = { saveBar.dismissReminder() }
+        return nav
+    }()
     static let recipes = RecipeStore()
     static let saveBar = SaveBarController(store: recipes)
     static let presets = PresetLibrary()
@@ -58,7 +63,7 @@ enum Shared {
         NSApp.setActivationPolicy(.regular)
         let w: NSWindow
         if let existing = window { w = existing } else {
-            w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 940, height: 700), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            w = MainWindow(contentRect: NSRect(x: 0, y: 0, width: 940, height: 700), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                          backing: .buffered, defer: false)
             w.title = "Whoprrr"
             w.titlebarAppearsTransparent = true
@@ -86,7 +91,7 @@ enum Shared {
     static func startRecipes() {
         for s in [audio as RecipeSurface, windows, clipboard, input, featuresSurface, displaySurface] { recipes.register(s) }
         watchSettingsForSaveBar()
-        // Anything still unsaved from last time was left on the stove: remember that, and show the bar as soon as the window opens.
+        // Anything still unsaved from last time was left on the stove: remember that, and show the mark as soon as the window opens.
         recipes.noteLeaving()
         saveBar.start()
         PicklsssController.shared.start()
@@ -151,6 +156,22 @@ enum Shared {
                 setup.beginLicensedLaunch()
             }
         }.store(in: &bag)
+    }
+}
+
+/// A document shortcut that also works when the save mark is outside the scroll viewport.
+final class MainWindow: NSWindow {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if attachedSheet == nil,
+           event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+           event.charactersIgnoringModifiers?.lowercased() == "s" {
+            Shared.saveBar.settingsDidChange()
+            if case .changing = Shared.saveBar.phase {
+                Shared.saveBar.save()
+                return true
+            }
+        }
+        return super.performKeyEquivalent(with: event)
     }
 }
 
