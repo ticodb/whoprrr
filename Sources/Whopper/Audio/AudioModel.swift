@@ -141,16 +141,49 @@ final class AudioModel: ObservableObject {
             test.enabled = true
             test.permissionVerified = false
             test.plugins = []
-            eqEngine.apply(test)
-        } else if audioActive { eqEngine.apply(settings.eq) } else { eqEngine.stop() }
+            applyEQ(test)
+        } else if audioActive { applyEQ(settings.eq) } else { stopEQ() }
         if testingMic {
             var test = settings.mic
             test.enabled = true
             test.plugins = []
-            micEngine.apply(test)
+            applyMic(test)
         } else if micActive, LivePermissionChecker().status(.microphone) == .granted {
-            micEngine.apply(settings.mic)
-        } else { micEngine.stop() }
+            applyMic(settings.mic)
+        } else { stopMic() }
+    }
+
+    // The engines' stop() waits for their CoreAudio queue. Never wait on the main thread: a stuck CoreAudio call there
+    // would freeze the whole app. Stop only on a real change, and off the main thread.
+    // One serial queue keeps every apply and stop in the order they were asked for.
+    private var eqRunning = true
+    private var micRunning = true
+    private let engineControl = DispatchQueue(label: "gg.tico.whopper.audio.control", qos: .userInitiated)
+
+    private func applyEQ(_ s: OutputEQSettings) {
+        eqRunning = true
+        let engine = eqEngine
+        engineControl.async { engine.apply(s) }
+    }
+
+    private func stopEQ() {
+        guard eqRunning else { return }
+        eqRunning = false
+        let engine = eqEngine
+        engineControl.async { engine.stop() }
+    }
+
+    private func applyMic(_ s: MicSettings) {
+        micRunning = true
+        let engine = micEngine
+        engineControl.async { engine.apply(s) }
+    }
+
+    private func stopMic() {
+        guard micRunning else { return }
+        micRunning = false
+        let engine = micEngine
+        engineControl.async { engine.stop() }
     }
 
     /// While the mic engine runs, the system input is Whoprrr Mic (falling back to the physical mic if it stops).

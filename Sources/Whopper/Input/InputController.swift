@@ -163,7 +163,8 @@ final class InputController: ObservableObject {
         guard CGPreflightListenEventAccess(), CGPreflightPostEventAccess(), AXIsProcessTrusted() else { return false }
         let engine = RemapEngine()
         let test = EventTapRunner(engine: engine, poster: EventPoster())
-        guard test.start() == .running else { test.stop(); return false }
+        // Tap creation and its thread handshake happen off the main thread.
+        guard await Task.detached(operation: { test.start() }).value == .running else { test.stop(); return false }
         defer { test.stop() }
         return await verifyRemapping(on: test, engine: engine, rules: [])
     }
