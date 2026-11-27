@@ -29,7 +29,7 @@ struct ExtrasView: View {
             if !addable.isEmpty {
                 SectionLabel("Add to your order").padding(.top, 4)
                 BrandCard { ForEach(Array(addable.enumerated()), id: \.offset) { i, r in
-                    row(r.title, r.detail, trailing: r.available ? AnyView(Button("Add") { Task { await c.openBuyPage() } }.buttonStyle(.brandQuiet).accessibilityLabel("Add \(r.title)")) : AnyView(StatusChip(text: "Not yet", tone: .neutral).fixedSize()))
+                    row(r.title, r.detail, trailing: r.available ? AnyView(Button("Add") { Task { await c.openBuyPage(r.item) } }.buttonStyle(.brandQuiet).accessibilityLabel("Add \(r.title)")) : AnyView(StatusChip(text: "Not yet", tone: .neutral).fixedSize()))
                     if i < addable.count - 1 { Divider() }
                 } }
             }
@@ -75,12 +75,15 @@ struct ExtrasView: View {
         return out
     }
 
-    private struct Add { var title: String; var detail: String; var available: Bool }
+    private struct Add { var title: String; var detail: String; var available: Bool; var item: PicklsssController.BuyItem? = nil }
     private var addable: [Add] {
         var out: [Add] = []
-        if pass?.tv != true && pass?.mac == true { out.append(Add(title: "The Combo", detail: "Whoprrr for Mac and Whoprrr TV together", available: true)) }
-        out.append(Add(title: "Frrries", detail: "4 more devices, Macs or TVs in any mix · $4", available: true))
-        if !license.hasPicklsss { out.append(Add(title: "Picklsss", detail: "Setups other people shared, fitted to your gear · $4, paid once · free if a picklsss you share is accepted", available: true)) }
+        // You already paid for the Mac app, so the TV app costs the difference to the Combo price.
+        if pass?.tv != true && pass?.mac == true {
+            out.append(Add(title: "Make it a combo", detail: "Add Whoprrr TV · $2, the difference to the Combo price", available: true, item: .combo))
+        }
+        out.append(Add(title: "Frrries", detail: "4 more devices, Macs or TVs in any mix · $4", available: true, item: .frrries))
+        if !license.hasPicklsss { out.append(Add(title: "Picklsss", detail: "Setups other people shared, fitted to your gear · $4, paid once · free if a picklsss you share is accepted", available: true, item: .picklsss)) }
         out.append(Add(title: "Cookboook", detail: "Later: a curated edition, vetted setups matched to your gear automatically. Free if you bought Picklsss (setups other people shared) before it arrives.", available: false))
         return out
     }

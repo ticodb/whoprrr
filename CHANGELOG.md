@@ -2,6 +2,14 @@
 
 All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://semver.org); betas are labelled `0.9.0 beta N`.
 
+## 0.9.0 beta 8: make it a combo from the app
+
+Released 2026-11-27.
+
+### Fixed
+- **Make it a combo** on the Extras page (was "The Combo") adds Whoprrr TV to a Mac order for $2, the difference to the Combo price. Before, its Add button opened a page that only offered Frrries and Picklsss.
+- Each **Add** on the Extras page opens your order's purchase page with just that item ticked.
+
 ## 0.9.0 beta 7: guided setup, activate from your order page, Add a TV
 
 Released 2026-11-27.

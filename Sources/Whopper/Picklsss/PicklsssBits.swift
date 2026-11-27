@@ -83,7 +83,7 @@ struct LockCard: View {
     }
 
     @ViewBuilder private var buttons: some View {
-        Button(c.awaitingPurchase ? "Open it again" : "Get Picklsss · $4") { Task { await c.openBuyPage() } }.buttonStyle(.brand).disabled(c.makingLink)
+        Button(c.awaitingPurchase ? "Open it again" : "Get Picklsss · $4") { Task { await c.openBuyPage(c.awaitingPurchase ? nil : .picklsss) } }.buttonStyle(.brand).disabled(c.makingLink)
         Button(c.checkStatus == .checking ? "Checking…" : "Check now") { Task { await c.checkNow() } }.buttonStyle(.brandQuiet).disabled(c.checkStatus == .checking)
         Button("I have a key") { enteringKey.toggle() }.buttonStyle(.brandQuiet)
     }
