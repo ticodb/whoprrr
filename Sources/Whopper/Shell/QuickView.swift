@@ -5,7 +5,7 @@ import WindowCore
 import AudioCore
 
 /// The menu-bar panel: what is happening right now and the things you reach for during the day. Nothing here needs
-/// setup; "Settings…" opens the main window for that.
+/// setup; the gear opens the main window for that.
 struct QuickView: View {
     @EnvironmentObject var features: FeatureStore
     @EnvironmentObject var input: InputController
@@ -38,7 +38,7 @@ struct QuickView: View {
         // through the faint card and button tints and the small text loses contrast.
         .background(Color(nsColor: .windowBackgroundColor).opacity(0.94))
         .background(DrawerWindowReader())
-        .onAppear { refreshPermissions(); windows.refreshTrust() }
+        .onAppear { refreshPermissions(); windows.refreshTrust(); updates.lookQuietly() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refreshPermissions() }
     }
 
@@ -50,7 +50,8 @@ struct QuickView: View {
             Wordmark(size: 24)
             Spacer()
             Button { Shared.showWindow() } label: { Image(systemName: "gearshape").font(.system(size: 16, weight: .medium)) }
-                .buttonStyle(.plain).help("Settings (⌘,)").foregroundStyle(Brand.accentText)
+                .buttonStyle(.plain).help("Settings (⌘,)").foregroundStyle(Brand.accentText).keyboardShortcut(",")
+                .accessibilityLabel("Settings")
         }
     }
 
@@ -195,11 +196,15 @@ struct QuickView: View {
 
     private var footer: some View {
         HStack {
-            Button("Settings…") { Shared.showWindow() }.buttonStyle(.brand).keyboardShortcut(",")
-            if updates.isAvailable {
-                Button("Check for Updates…") { updates.checkForUpdates() }.buttonStyle(.plain).font(Brand.subheadline).foregroundStyle(.secondary)
-                    .disabled(!updates.canCheck)
+            // The version doubles as the way to updates: violet while this is the latest build, the notice colour when a
+            // newer one is waiting on the About page.
+            Button { Shared.showWindow(page: .about) } label: {
+                Text(updates.newerVersion == nil ? AppInfo.shortVersionLine : "\(AppInfo.shortVersionLine) · Update available")
+                    .font(Brand.subheadline)
+                    .foregroundStyle(updates.newerVersion == nil ? Brand.accentText : StatusChip.Tone.warn.text)
             }
+            .buttonStyle(.plain)
+            .help(updates.newerVersion.map { "Whoprrr \($0) is available. Open About to install it." } ?? "This is the latest version. Open About.")
             Spacer()
             Button("Quit") { NSApp.terminate(nil) }.buttonStyle(.plain).font(Brand.subheadline).foregroundStyle(.secondary).keyboardShortcut("q")
         }
