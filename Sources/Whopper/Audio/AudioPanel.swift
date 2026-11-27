@@ -180,7 +180,6 @@ struct EQBandsView: View {
                 }
             }
             HStack {
-                Menu("Preset") { ForEach(EQProfile.presets, id: \.name) { p in Button(p.name) { profile = p.profile } } }.controlSize(.regular).fixedSize()
                 Text("Preamp").font(Brand.caption)
                 Slider(value: $profile.preampDB, in: -12...6, step: 0.5)
                 Text(String(format: "%+.1f dB", profile.preampDB)).font(Brand.caption.monospacedDigit()).frame(width: 56, alignment: .trailing)

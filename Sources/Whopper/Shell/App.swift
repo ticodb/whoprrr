@@ -16,12 +16,16 @@ enum Shared {
     static let nav: WindowNav = {
         let nav = WindowNav()
         nav.onPageChange = { saveBar.pageDidChange() }
-        nav.onClose = { saveBar.dismissReminder() }
+        nav.onClose = {
+            saveBar.dismissReminder()
+            saveBar.hoverConfirmation(false)
+        }
         return nav
     }()
     static let recipes = RecipeStore()
     static let saveBar = SaveBarController(store: recipes)
-    static let presets = PresetLibrary()
+    static let presets = PresetLibrary(recipes: recipes)
+    static let presetActions = PresetActions()
     private static let featuresSurface = FeaturesSurface(features)
     private static let displaySurface = DisplaySurface(model)
     private static var gearTimer: Timer?
@@ -32,7 +36,7 @@ enum Shared {
     /// Every object the views read from the environment.
     static func wrap<V: View>(_ v: V) -> some View {
         v.environmentObject(model).environmentObject(features).environmentObject(audio).environmentObject(windows)
-            .environmentObject(clipboard).environmentObject(input).environmentObject(nav).environmentObject(recipes).environmentObject(saveBar).environmentObject(presets)
+            .environmentObject(clipboard).environmentObject(input).environmentObject(nav).environmentObject(recipes).environmentObject(saveBar).environmentObject(presets).environmentObject(presetActions)
     }
 
     /// The window that hosts the menu-bar drawer (set by the drawer's own view).
@@ -135,14 +139,22 @@ enum Shared {
 /// A document shortcut that also works when the save mark is outside the scroll viewport.
 final class MainWindow: NSWindow {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if attachedSheet == nil,
-           event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
-           event.charactersIgnoringModifiers?.lowercased() == "s" {
+        guard attachedSheet == nil, event.modifierFlags.intersection([.command, .option, .control, .shift]) == .command else {
+            return super.performKeyEquivalent(with: event)
+        }
+        switch event.charactersIgnoringModifiers?.lowercased() {
+        case "s":
             Shared.saveBar.settingsDidChange()
             if case .changing = Shared.saveBar.phase {
                 Shared.saveBar.save()
                 return true
             }
+        case "u":
+            if let (surface, entry) = Shared.presetActions.editedPreset(on: Shared.nav.page, in: Shared.presets) {
+                Shared.presetActions.update(entry, on: surface)
+                return true
+            }
+        default: break
         }
         return super.performKeyEquivalent(with: event)
     }

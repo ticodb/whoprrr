@@ -47,6 +47,13 @@ extension EnvironmentValues {
 struct RecipeSaveMark: View {
     @EnvironmentObject private var bar: SaveBarController
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @EnvironmentObject private var library: PresetLibrary
+    @EnvironmentObject private var presets: PresetActions
+    @EnvironmentObject private var nav: WindowNav
+    @EnvironmentObject private var audio: AudioModel
+    @EnvironmentObject private var windows: WindowModel
+    @EnvironmentObject private var clipboard: ClipboardController
+    @EnvironmentObject private var input: InputController
     @State private var naming = false
     @State private var filled = false
 
@@ -56,6 +63,9 @@ struct RecipeSaveMark: View {
             case .changing(let recipe):
                 Menu {
                     Button("Save to \(recipe)") { bar.save() }.keyboardShortcut("s", modifiers: .command)
+                    if let (surface, entry) = presets.editedPreset(on: nav.page, in: library, includeOtherPanels: true) {
+                        Button("Update preset “\(entry.name)” too") { presets.update(entry, on: surface) }
+                    }
                     Button("Save as new recipe…") { naming = true }
                     Divider()
                     Button("Put back") { bar.putBack() }
@@ -107,13 +117,13 @@ struct SaveBarArea: View {
 
     var body: some View {
         Group {
-            if case .saved(let confirmation) = bar.phase {
+            if let confirmation = bar.confirmation {
                 saved(confirmation)
             } else if let recipe = bar.reminderRecipe {
                 reminder(recipe)
             }
         }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: bar.phase)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: bar.confirmation)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: bar.reminderRecipe)
     }
 
@@ -143,7 +153,7 @@ struct SaveBarArea: View {
                 .accessibilityHidden(true)
             Text(confirmation.message).font(Brand.subheadline).lineLimit(2)
             Spacer(minLength: 8)
-            if confirmation.undoRecipeID != nil { Button("Undo") { bar.undoSave() }.buttonStyle(.brandPlain) }
+            if confirmation.undoRecipeID != nil || confirmation.canUndoPreset { Button("Undo") { bar.undoSave() }.buttonStyle(.brandPlain) }
             Button { bar.dismissConfirmation() } label: { Image(systemName: "xmark") }
                 .buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("Dismiss saved message").help("Dismiss")
         }

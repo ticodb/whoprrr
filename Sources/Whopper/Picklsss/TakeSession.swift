@@ -307,11 +307,13 @@ final class TakeSession: ObservableObject, Identifiable {
                 if tryNow, let p = Shared.model.presetsForSelected().first(where: { $0.name == saved }) { Shared.model.apply(p) }
                 continue
             }
-            Shared.presets.save(name, data: tp.data, for: tp.key)
+            let saved = Shared.presets.save(name, data: tp.data, for: tp.key)
             landed.append("\(tp.title): “\(name)”")
-            if tryNow, let surface = Self.surface(tp.key) { _ = surface.apply(tp.data) }
+            if tryNow, let surface = PresetSurfaces.surface(tp.key), surface.apply(tp.data) {
+                Shared.presets.select(.personal(saved.id), at: surface.location)
+            }
         }
-        presetNote = landed.isEmpty ? "Nothing in that part could be added to this Mac." : "Added to your presets: " + landed.joined(separator: ", ") + (tryNow ? ". It is on now; the save bar offers to keep it." : ".")
+        presetNote = landed.isEmpty ? "Nothing in that part could be added to this Mac." : "Added to your presets: " + landed.joined(separator: ", ") + (tryNow ? ". It is on now. Open “Cookin’” to save it to the active recipe." : ".")
         if !isFile, let c = card, !landed.isEmpty {
             var rec = TakeRecord(picklsssId: c.id, title: c.title, handle: c.cook.handle, version: c.version, recipeID: nil, takenAt: Date(), counted: receipt?.counted ?? false,
                                  takeToken: receipt?.takeToken, askFrom: receipt?.askFrom, askUntil: receipt?.askUntil)
@@ -321,18 +323,7 @@ final class TakeSession: ObservableObject, Identifiable {
         stage = .partPicker
     }
 
-    static func surface(_ key: String) -> PresetSurface? {
-        switch key {
-        case "audio.eq": PresetSurfaces.eq(Shared.audio)
-        case "audio.outputfx": PresetSurfaces.outputFX(Shared.audio)
-        case "audio.mic": PresetSurfaces.mic(Shared.audio)
-        case "audio.routing": PresetSurfaces.routing(Shared.audio)
-        case "windows": PresetSurfaces.windows(Shared.windows)
-        case "clipboard": PresetSurfaces.clipboard(Shared.clipboard)
-        case "input": PresetSurfaces.input(Shared.input)
-        default: nil
-        }
-    }
+
 
     func openPartPicker() { presetNote = nil; message = nil; stage = .partPicker }
 
