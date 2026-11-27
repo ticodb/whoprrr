@@ -34,6 +34,7 @@ struct SetupView: View {
 
     private var setupContent: some View {
         VStack(alignment: .leading, spacing: 16) {
+            HandoverNotice()
             if setup.step != .key && setup.renewalVisible { renewal }
             else {
                 switch setup.step {

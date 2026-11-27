@@ -175,7 +175,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// A `.whoprrr-setup` file opened from Finder or dropped on the app. The checker runs every time; opening is free to look at.
     func application(_ application: NSApplication, open urls: [URL]) {
-        for u in urls where u.pathExtension == SharedSetupFile.fileExtension { PicklsssController.shared.openFile(u) }
+        for url in urls {
+            if url.scheme?.lowercased() == "whoprrr" {
+                // Any web page can open this scheme. A malformed link is ignored without showing anything.
+                guard let code = SetupCode.fromActivationURL(url) else { continue }
+                Shared.showWindow()
+                Task { await LicenseController.shared.activate(setupCode: code) }
+            } else if url.isFileURL, url.pathExtension == SharedSetupFile.fileExtension {
+                PicklsssController.shared.openFile(url)
+            }
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
