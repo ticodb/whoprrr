@@ -4,6 +4,7 @@ import AppKit
 /// Version, how to report a problem, the privacy promise and who made what Whoprrr stands on.
 struct AboutView: View {
     @State private var copied = false
+    @ObservedObject private var updates = UpdateController.shared
 
     /// "Activated on this Mac until 25 December 2026 · Mac 2 of 3". Never the key: the app does not keep it.
     private var activationLine: String {
@@ -26,6 +27,25 @@ struct AboutView: View {
                     }
                     Text(AppInfo.tagline).font(Brand.body).foregroundStyle(.secondary)
                     Text(AppInfo.versionLine).font(Brand.caption).foregroundStyle(.secondary)
+                }
+            }
+
+            if updates.isAvailable {
+                BrandCard {
+                    SectionLabel("Updates")
+                    if let newer = updates.newerVersion {
+                        HStack(spacing: 8) {
+                            StatusChip(text: "Update available", tone: .warn)
+                            Text("Whoprrr \(newer) is ready to install. You have \(AppInfo.shortVersionLine).").font(Brand.callout).fixedSize(horizontal: false, vertical: true)
+                        }
+                        Button("Install Whoprrr \(newer)…") { updates.checkForUpdates() }.buttonStyle(.brand).disabled(!updates.canCheck)
+                    } else {
+                        HStack(spacing: 8) {
+                            StatusChip(text: "Up to date", tone: .good)
+                            Text("\(AppInfo.shortVersionLine) is the latest version Whoprrr knows of.").font(Brand.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
+                        Button("Check now") { updates.checkForUpdates() }.buttonStyle(.brandQuiet).disabled(!updates.canCheck)
+                    }
                 }
             }
 
@@ -78,6 +98,7 @@ struct AboutView: View {
             Text("\(AppInfo.name) is released under the \(AppInfo.licenseName). It is not affiliated with or endorsed by Apple, Samsung, Logitech, RØDE or any other company named here; all names are trademarks of their owners. Full notices: ACKNOWLEDGMENTS.md and THIRD_PARTY_LICENSES.md in the project.")
                 .font(Brand.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
+        .onAppear { updates.lookQuietly() }
     }
 
     static var dataFolder: URL {
