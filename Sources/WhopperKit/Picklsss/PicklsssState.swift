@@ -56,10 +56,13 @@ public struct SharedRecord: Codable, Equatable, Identifiable, Sendable {
     /// A fingerprint of the document that was last sent, to tell whether the recipe has moved on since.
     public var digest: String
     public var sharedAt: Date
+    public var includesTypingLanguage: Bool?
 
-    public init(picklsssId: String, recipeID: UUID?, title: String, state: String, version: Int, parts: [String], digest: String, sharedAt: Date) {
+    public init(picklsssId: String, recipeID: UUID?, title: String, state: String, version: Int, parts: [String], digest: String, sharedAt: Date,
+                includesTypingLanguage: Bool? = nil) {
         self.picklsssId = picklsssId; self.recipeID = recipeID; self.title = title; self.state = state; self.version = version
         self.parts = parts; self.digest = digest; self.sharedAt = sharedAt
+        self.includesTypingLanguage = includesTypingLanguage
     }
     public var isPublic: Bool { state == ShelfState.public.rawValue }
 }
@@ -228,7 +231,13 @@ public enum ShareDigest {
     /// What a recipe holds that a shared copy would carry: its settings, parts, gear and requirements. The title and the one line are
     /// left out, so only a change to the setup itself makes a shared copy "older than your recipe".
     public static func of(setup: SharedSetup) -> String {
-        of(.object(["settings": .object(setup.settings), "parts": .strings(setup.parts), "gear": setup.json["gear"] ?? .null, "requirements": setup.json["requirements"] ?? .null]))
+        let json = setup.json
+        var content: [String: JSONValue] = [
+            "settings": .object(setup.settings), "parts": .strings(setup.parts),
+            "gear": json["gear"] ?? .null, "requirements": json["requirements"] ?? .null,
+        ]
+        content["typingLanguage"] = json["typingLanguage"]
+        return of(.object(content))
     }
 
     /// A fingerprint of the exact bytes of a document, to tell whether the recipe has changed since it was shared.

@@ -14,6 +14,8 @@ struct QuickView: View {
     @EnvironmentObject var clipboard: ClipboardController
     @EnvironmentObject var display: AppModel
     @EnvironmentObject var recipes: RecipeStore
+    @EnvironmentObject private var saveBar: SaveBarController
+    @ObservedObject private var typingLanguage = Shared.typingLanguage
     @ObservedObject private var setup = SetupController.shared
     @ObservedObject private var updates = UpdateController.shared
     @State private var missing: [Permission] = []
@@ -113,10 +115,12 @@ struct QuickView: View {
         var value = "Pick one to set everything up at once"
         if let a = active {
             let g = a.gear(connected: connected)
-            if recipes.isModified(a.id) { value = "Settings changed since applied" }
+            if !saveBar.changedSections.isEmpty { value = "Unsaved changes · " + saveBar.changedTitles.joined(separator: ", ") }
             else if a.devices.isEmpty { value = "Not tied to gear" }
             else if g.missing.isEmpty { value = "All gear connected" }
             else { value = "\(g.present.count) of \(a.devices.count) pieces of gear connected" }
+        } else if !saveBar.changedSections.isEmpty {
+            value = "Unsaved changes · " + saveBar.changedTitles.joined(separator: ", ")
         } else if recipes.recipes.isEmpty { value = "Save your setup for this gear" }
         return VStack(alignment: .leading, spacing: 6) {
             QuickRow(symbol: active?.symbol ?? "fork.knife", title: active?.name ?? "Recipe", value: value, opens: .recipes) {
@@ -129,7 +133,13 @@ struct QuickView: View {
                     Button("Manage recipes…") { Shared.showWindow(page: .recipes) }
                 } label: { Text("Switch") }.menuStyle(.button).buttonStyle(.brandQuiet).fixedSize()
             }
-            if let n = recipes.notice { Text(n).font(Brand.caption).foregroundStyle(Brand.accentText).padding(.horizontal, 4) }
+            let typingForThisRecipe = typingLanguage.lastAppliedRecipeID == active?.id
+            if let note = (typingForThisRecipe ? typingLanguage.note : nil) ?? recipes.notice {
+                Text(note).font(Brand.caption).foregroundStyle(Brand.accentText).padding(.horizontal, 4)
+            }
+            if typingForThisRecipe, let note = typingLanguage.skippedNote {
+                Text(note).font(Brand.caption).foregroundStyle(.secondary).padding(.horizontal, 4)
+            }
         }
     }
 
@@ -235,13 +245,20 @@ struct QuickView: View {
     }
 
     private var footer: some View {
-        HStack {
-            Button("Settings…") { Shared.showWindow() }.buttonStyle(.brand).keyboardShortcut(",")
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Button("Open Whoprrr") { Shared.showWindow() }.buttonStyle(.brand).keyboardShortcut("o")
+                    .background {
+                        Button("Open Whoprrr") { Shared.showWindow() }.keyboardShortcut(",")
+                            .opacity(0).accessibilityHidden(true).allowsHitTesting(false)
+                    }
+                Spacer()
+                Button(AppInfo.shortVersionLine) { Shared.showWindow(page: .about) }
+                    .buttonStyle(.plain).font(Brand.caption).foregroundStyle(Brand.accentText)
+                Button("Quit") { NSApp.terminate(nil) }
+                    .buttonStyle(.plain).font(Brand.subheadline).foregroundStyle(.secondary).keyboardShortcut("q")
+            }
             if updates.isAvailable { updateLine }
-            Spacer()
-            Button(AppInfo.shortVersionLine) { Shared.showWindow(page: .about) }
-                .buttonStyle(.plain).font(Brand.caption).foregroundStyle(Brand.accentText)
-            Button("Quit") { NSApp.terminate(nil) }.buttonStyle(.plain).font(Brand.subheadline).foregroundStyle(.secondary).keyboardShortcut("q")
         }
         .padding(.top, 2)
     }

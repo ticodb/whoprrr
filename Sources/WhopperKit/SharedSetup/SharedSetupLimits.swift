@@ -182,7 +182,7 @@ private struct Checker {
             add("formatVersion", "format", newer ? "This setup was made with a newer Whoprrr. Update Whoprrr to open it." : "This setup is in a format Whoprrr does not know.")
             return
         }
-        guard let o = fields(doc, "", required: ["formatVersion", "title", "line", "parts", "gear", "requirements", "settings"], what: "The setup") else { return }
+        guard let o = fields(doc, "", required: ["formatVersion", "title", "line", "parts", "gear", "requirements", "settings"], optional: ["typingLanguage"], what: "The setup") else { return }
         if top["formatVersion"] == nil { return }
 
         _ = text(o, "title", "", max: T.titleMax, what: "The title", personal: false)
@@ -194,6 +194,15 @@ private struct Checker {
 
         checkGear(o)
         checkRequirements(o)
+        if let language = o["typingLanguage"],
+           let fields = fields(language, "typingLanguage", required: ["id", "name"], what: "Typing language") {
+            if let id = fields["id"]?.string,
+               id.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$"#, options: .regularExpression) != nil {
+                _ = text(fields, "name", "typingLanguage", max: 100, what: "Typing language name")
+            } else {
+                add("typingLanguage.id", "shape", "The typing language has an invalid input source ID.", tampered: true)
+            }
+        }
 
         // Settings: exactly the parts that are listed.
         guard let s = o["settings"]?.object else { add("settings", "shape", "The settings are missing or not in the form Whoprrr writes.", tampered: true); return }

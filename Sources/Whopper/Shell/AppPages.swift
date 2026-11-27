@@ -22,13 +22,13 @@ enum AppPage: Hashable {
 }
 
 extension AppPage {
-    /// The page where a recipe part is changed ("audio" → Audio), so a window opened to a reminder lands on it. Falls back to
-    /// Recipes when that feature is switched off.
+    /// The page for an unsaved section. Recipes is the fallback when its feature is switched off.
     @MainActor
     static func page(forRecipePart key: String, features: FeatureStore) -> AppPage {
         let page: AppPage
         switch key {
-        case "audio": page = .feature(.audio)
+        case "audio", "audio.eq", "audio.outputfx", "audio.routing": page = .feature(.audio)
+        case "audio.mic": page = .feature(.microphone)
         case "windows": page = .feature(.windows)
         case "clipboard": page = .feature(.clipboard)
         case "input": page = .feature(.remap)
@@ -46,15 +46,9 @@ extension AppPage {
 final class WindowNav: ObservableObject {
     /// Set by the menu-bar panel to open the window straight into the new-recipe sheet.
     @Published var newRecipeRequested = false
-    /// True while the main window is on screen. Questions and reminders that belong to it wait until it is.
-    @Published var windowOpen = false {
-        didSet { if !windowOpen { onClose?() } }
-    }
-    @Published var page: AppPage = AppPage(name: ProcessInfo.processInfo.environment["WHOPPER_PAGE"] ?? "") ?? .feature(.display) {
-        didSet { if windowOpen && oldValue != page { onPageChange?() } }
-    }
-    var onPageChange: (() -> Void)?
-    var onClose: (() -> Void)?
+    /// Questions that belong to the main window wait until it is on screen.
+    @Published var windowOpen = false
+    @Published var page: AppPage = AppPage(name: ProcessInfo.processInfo.environment["WHOPPER_PAGE"] ?? "") ?? .feature(.display)
 }
 
 /// The content of one page. Each feature supplies its own panel.

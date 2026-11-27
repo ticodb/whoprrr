@@ -58,10 +58,9 @@ enum DebugDriver {
         case "recipe-save-change":
             Shared.windows.settings.gap = s["gap"] as? Double ?? 18
             Shared.saveBar.settingsDidChange()
-        case "recipe-save-not-yet": Shared.saveBar.dismissReminder()
         case "recipe-save-now": Shared.saveBar.save()
         case "recipe-save-state":
-            emit("recipe save: \(Shared.saveBar.phase), reminder=\(Shared.saveBar.reminderRecipe ?? "-")")
+            emit("recipe save: \(Shared.saveBar.changedTitles.joined(separator: ", "))")
         case "preset-seed":
             Shared.nav.page = .feature(.audio)
             let uid = "debug-xm4"
@@ -234,10 +233,11 @@ enum DebugDriver {
             return
         }
         // The page as the window lays it out (a ScrollView draws nothing in an image, so the page is drawn without one): the same
-        // 680-wide column with 28 points around it, the reminder and notices above it, the save bar below.
+        // 680-wide column with 28 points around it, the save bar pinned above it, followed by any notices.
         let page = VStack(alignment: .leading, spacing: 16) {
-            StoveReminder(); NoticesBar(); PageContent(page: Shared.nav.page).environment(\.showsRecipeSaveMark, true)
             SaveBarArea()
+            NoticesBar()
+            PageContent(page: Shared.nav.page)
         }.padding(28).frame(width: 680 + 56, alignment: .topLeading)
             .overlay(alignment: .top) {
                 if let milestone = c.milestone {

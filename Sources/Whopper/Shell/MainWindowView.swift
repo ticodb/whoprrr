@@ -9,9 +9,11 @@ struct MainWindowView: View {
     @EnvironmentObject var input: InputController
     @EnvironmentObject var nav: WindowNav
     @EnvironmentObject var recipes: RecipeStore
+    @EnvironmentObject private var saveBar: SaveBarController
     @ObservedObject private var setup = SetupController.shared
     @EnvironmentObject private var presetActions: PresetActions
     @ObservedObject private var license = LicenseController.shared
+    @ObservedObject private var backups = Shared.backups
     @ObservedObject private var picklsss = PicklsssController.shared
 
     var body: some View {
@@ -23,10 +25,15 @@ struct MainWindowView: View {
             sidebar.frame(width: 232)
             Divider()
             VStack(spacing: 0) {
+                if !saveBar.changedSections.isEmpty || saveBar.confirmation != nil {
+                    SaveBarArea()
+                        .padding(.horizontal, 28)
+                        .frame(maxWidth: 680, alignment: .leading)
+                        .padding(.top, 14)
+                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         HandoverNotice()
-                        StoveReminder()
                         NoticesBar()
                         if case .feature(let feature) = nav.page, let finding = setup.progress.parked[feature] {
                             BrandCard {
@@ -35,24 +42,19 @@ struct MainWindowView: View {
                                     setup.continueParked([feature])
                                 }.buttonStyle(.brand)
                             }
-                            PageContent(page: nav.page).environment(\.showsRecipeSaveMark, true).disabled(true)
-                        } else { PageContent(page: nav.page).environment(\.showsRecipeSaveMark, true) }
+                            PageContent(page: nav.page).disabled(true)
+                        } else { PageContent(page: nav.page) }
                     }
                     .padding(28)
                     .frame(maxWidth: 680, alignment: .topLeading)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
-                // Reminders and confirmations are shared by every page of the window.
-                SaveBarArea()
-                    .padding(.horizontal, 28).padding(.bottom, 14)
-                    .frame(maxWidth: 680 + 56, alignment: .leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .overlay(alignment: .top) {
-                if let milestone = picklsss.milestone {
-                    PicklsssMilestoneView(milestone: milestone)
-                        .id(milestone.id)
-                        .padding(.top, 76)
+                .overlay(alignment: .top) {
+                    if let milestone = picklsss.milestone {
+                        PicklsssMilestoneView(milestone: milestone)
+                            .id(milestone.id)
+                            .padding(.top, 76)
+                    }
                 }
             }
         }
@@ -61,11 +63,34 @@ struct MainWindowView: View {
         .sheet(item: Binding(get: { nav.windowOpen ? recipes.pendingSwitch : nil },
                              set: { if $0 == nil, recipes.pendingSwitch != nil { recipes.resolveSwitch(.stay) } })) { AutoSwitchSheet(pending: $0) }
         .sheet(item: $picklsss.sharing) { ShareFlowView(s: $0) }
+        .sheet(item: $backups.review) { BackupReviewSheet(controller: backups, item: $0) }
+        .alert(backups.problemTitle,
+               isPresented: Binding(get: { backups.problem != nil }, set: { if !$0 { backups.problem = nil } })) {
+            if backups.problem == .newer {
+                Button("Check for Updates") { UpdateController.shared.checkForUpdates() }
+                    .disabled(!UpdateController.shared.canCheck)
+                Button("Cancel", role: .cancel) {}
+            } else if backups.problem == .picklsssNeeded {
+                Button("Get Picklsss") { backups.getPicklsss() }
+                Button("Cancel", role: .cancel) {}
+            } else {
+                Button("OK", role: .cancel) {}
+            }
+        } message: {
+            if case .message(let text) = backups.problem { Text(text) }
+            if backups.problem == .picklsssNeeded { Text("Taking a setup from a backup made with another key needs Picklsss.") }
+        }
         .alert("Presets", isPresented: Binding(get: { presetActions.problem != nil },
                                               set: { if !$0 { presetActions.problem = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(presetActions.problem ?? "")
+        }
+        .alert("Could not finish", isPresented: Binding(get: { saveBar.problem != nil },
+                                                      set: { if !$0 { saveBar.problem = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(saveBar.problem ?? "")
         }
         .onChange(of: features.enabled) { _, _ in
             if case .feature(let f) = nav.page, !features.isEnabled(f) { nav.page = .features }

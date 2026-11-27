@@ -14,7 +14,18 @@ final class TakeSession: ObservableObject, Identifiable {
     enum Flag: Equatable { case none, asking, flagged, failed(String) }
 
     /// What a take did, so one button can put everything back.
-    struct Applied { var recipeID: UUID?; var name: String; var before: [String: Data]; var parts: [String]; var failed: [String]; var notes: [String]; var updated: Bool; var savedOnly = false; /* the recipe holds it, but it was not put on this Mac yet */ var notLive = false }
+    struct Applied {
+        var recipeID: UUID?
+        var name: String
+        var before: [String: Data]
+        var parts: [String]
+        var failed: [String]
+        var notes: [String]
+        var updated: Bool
+        var savedOnly = false
+        var notLive = false
+        var typingChange: (before: String, after: String)?
+    }
 
     let id = UUID()
     unowned let controller: PicklsssController
@@ -239,6 +250,8 @@ final class TakeSession: ObservableObject, Identifiable {
             // A plain choice between yours and the new one: the recipe takes the new content, and what it held is one step away.
             var r = old
             r.sections = fit.recipe.sections; r.devices = fit.recipe.devices; r.skippedLines = fit.recipe.skippedLines; r.authorsOriginal = fit.recipe.authorsOriginal
+            r.inputSourceID = fit.recipe.inputSourceID
+            r.inputSourceName = fit.recipe.inputSourceName
             r.previous = RecipeVersion(sections: old.sections, savedAt: old.updatedAt, replacedAt: Date(), isNewer: false)
             r.updatedAt = Date()
             recipes.replaceTaken(r)
@@ -254,7 +267,14 @@ final class TakeSession: ObservableObject, Identifiable {
         fit.recipe.name = StarterRecipes.uniqueName(setup.title, existing: recipes.recipes.map(\.name))
         let added = recipes.addTaken(fit.recipe)
         // "Save it for later": every line is waiting, so there is nothing to put on this Mac. The recipe is saved the same way and is not applied.
+        let inputBefore = Shared.typingLanguage.currentID
         let failed = saveOnly ? [] : recipes.apply(added.id)
+        let inputAfter = Shared.typingLanguage.currentID
+        let typingChange: (before: String, after: String)?
+        if let inputBefore, let inputAfter, inputAfter == added.inputSourceID, inputAfter != inputBefore,
+           Shared.typingLanguage.note != nil, !saveOnly {
+            typingChange = (inputBefore, inputAfter)
+        } else { typingChange = nil }
         if !isFile, let c = card {
             var rec = TakeRecord(picklsssId: c.id, title: c.title, handle: c.cook.handle, version: c.version, recipeID: added.id, takenAt: Date(),
                                  counted: receipt?.counted ?? false, takeToken: receipt?.takeToken, askFrom: receipt?.askFrom, askUntil: receipt?.askUntil,
@@ -262,7 +282,8 @@ final class TakeSession: ObservableObject, Identifiable {
             if receipt?.again == true { rec.counted = false; rec.takeToken = nil }       // the first take's token and counting stand
             controller.record(rec)
         }
-        return Applied(recipeID: added.id, name: added.name, before: before, parts: parts, failed: failed, notes: notes, updated: false, savedOnly: saveOnly)
+        return Applied(recipeID: added.id, name: added.name, before: before, parts: parts, failed: failed,
+                       notes: notes, updated: false, savedOnly: saveOnly, typingChange: typingChange)
     }
 
     static func feature(_ part: String) -> Feature? {
@@ -281,6 +302,9 @@ final class TakeSession: ObservableObject, Identifiable {
     func putEverythingBack() {
         guard let a = applied, !a.updated, let id = a.recipeID else { return }
         controller.recipes.restore(a.before)
+        if controller.recipes.activeID == id, let typing = a.typingChange {
+            Shared.typingLanguage.undoTake(before: typing.before, after: typing.after)
+        }
         controller.recipes.delete(id)
         controller.recipes.notice = "Put everything back. “\(a.name)” is off this Mac."
         applied = nil
@@ -313,7 +337,7 @@ final class TakeSession: ObservableObject, Identifiable {
                 Shared.presets.select(.personal(saved.id), at: surface.location)
             }
         }
-        presetNote = landed.isEmpty ? "Nothing in that part could be added to this Mac." : "Added to your presets: " + landed.joined(separator: ", ") + (tryNow ? ". It is on now. Open “Cookin’” to save it to the active recipe." : ".")
+        presetNote = landed.isEmpty ? "Nothing in that part could be added to this Mac." : "Added to your presets: " + landed.joined(separator: ", ") + (tryNow ? ". It is on now. Use the save bar to update the active recipe." : ".")
         if !isFile, let c = card, !landed.isEmpty {
             var rec = TakeRecord(picklsssId: c.id, title: c.title, handle: c.cook.handle, version: c.version, recipeID: nil, takenAt: Date(), counted: receipt?.counted ?? false,
                                  takeToken: receipt?.takeToken, askFrom: receipt?.askFrom, askUntil: receipt?.askUntil)

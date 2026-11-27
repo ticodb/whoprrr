@@ -88,7 +88,7 @@ public enum TakeFit {
         case .keysLogitech, .keysMappings: roles = ["mouse", "keyboard", "other"]
         case .display: roles = ["display"]
         case .equalizerCurve: roles = ["speaker"]
-        case .outputEffects, .outputPlugins, .windows, .keysSettings, .keysRules, .clipboard: roles = []
+        case .outputEffects, .outputPlugins, .windows, .keysSettings, .keysRules, .clipboard, .typingLanguage: roles = []
         }
         var relevant: [GearMatch] = []
         if let g = gearIndex { relevant = plan.matches.filter { $0.authorIndex == g } }
@@ -119,6 +119,11 @@ public enum SetupDiff {
     public static func lineChanges(setup: SharedSetup, plan: FitPlan, env: ReceiverEnvironment) -> [String: LineChange] {
         var out: [String: LineChange] = [:]
         for line in plan.lines where !line.state.isOff {
+            if line.kind == .typingLanguage, let choice = setup.typingLanguage {
+                let changes = env.currentInputSource != choice.id
+                out[line.id] = LineChange(lineID: line.id, changed: changes ? 1 : 0, examples: changes ? ["Typing in \(choice.name)"] : [])
+                continue
+            }
             var only = plan
             only.lines = plan.lines.map { l in var l = l; if l.id != line.id { l.state = .off("") }; return l }
             let fitted = SharedSetupFit.fit(setup, plan: only, for: env)

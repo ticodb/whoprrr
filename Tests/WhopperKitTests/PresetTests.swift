@@ -75,15 +75,18 @@ final class PresetTests: RecipeHarnessCase {
         XCTAssertFalse(result.edited)
     }
 
-    func testFactoryEditsAreOverridesAndHideShowPreservesThem() throws {
-        let presets = library()
-        let h = harness()
+    func testLegacyFactoryOverridesRemainReadableAndCanBeRestored() throws {
+        let url = tmpDir().appendingPathComponent("presets.json")
+        var catalog = PresetCatalog()
         let id = PresetID.factory("flat")
-        XCTAssertTrue(presets.rename(id, to: "Quiet", for: control))
-        let entry = try XCTUnwrap(groups(presets).builtIn.first)
-        XCTAssertNotNil(presets.update(entry, with: Data([4]), at: location, recipePart: "audio", recipes: h.store))
+        catalog.edit(id, for: control, name: "Quiet", data: Data([4]))
+        XCTAssertTrue(JSONStore<PresetFile>(url: url).save(PresetFile(catalog: catalog)))
+        let presets = PresetLibrary(url: url)
         XCTAssertTrue(presets.select(id, at: location))
         XCTAssertEqual(groups(presets).inUse?.name, "Quiet")
+        let entry = try XCTUnwrap(groups(presets).inUse)
+        XCTAssertFalse(presets.rename(id, to: "Renamed", for: control))
+        XCTAssertNil(presets.update(entry, with: Data([5]), at: location, recipePart: "audio", recipes: harness().store))
         XCTAssertEqual(groups(presets).inUse?.changed, true)
         XCTAssertTrue(presets.setHidden(true, id: "flat", for: control))
         XCTAssertTrue(groups(presets).builtIn.isEmpty)
@@ -105,17 +108,19 @@ final class PresetTests: RecipeHarnessCase {
         let entry = try XCTUnwrap(groups(presets).inUse)
         h.audio.value = "tuned"
         h.bar.settingsDidChange()
-        let update = try XCTUnwrap(presets.update(entry, with: Data([2]), at: location, recipePart: "audio", recipes: h.store))
-        h.bar.showPresetUpdate(update, in: presets)
-        XCTAssertEqual(h.bar.confirmation?.message, "“Desk” updated and saved to Office.")
-        XCTAssertEqual(h.bar.phase, .idle)
+        XCTAssertTrue(h.bar.savePreset("Desk", in: "audio") {
+            guard let update = presets.update(entry, with: Data([2]), at: location, recipePart: "audio", recipes: h.store) else { return nil }
+            return { presets.undo(update, recipes: h.store, applyRecipe: false) }
+        })
+        XCTAssertEqual(h.bar.confirmation?.message, "Saved to preset Desk")
+        XCTAssertTrue(h.bar.changedSections.isEmpty)
         XCTAssertEqual(h.store.recipe(recipe.id)?.sections["audio"], RecipeStore.sections(["audio": "tuned"])["audio"])
         XCTAssertEqual(groups(presets).inUse?.data, Data([2]))
         XCTAssertFalse(h.store.isModified(recipe.id))
         h.bar.undoSave()
         XCTAssertNil(h.bar.confirmation)
         XCTAssertEqual(h.store.recipe(recipe.id)?.sections, recipe.sections)
-        XCTAssertEqual(h.audio.value, "home-audio")
+        XCTAssertEqual(h.audio.value, "tuned")
         XCTAssertEqual(groups(presets).inUse, entry)
         XCTAssertTrue(h.store.recipe(recipe.id)?.previous?.isNewer == true)
     }
@@ -128,15 +133,53 @@ final class PresetTests: RecipeHarnessCase {
         h.bar.settingsDidChange()
         XCTAssertTrue(presets.saveNew("Desk", data: Data([1]), at: location))
         let entry = try XCTUnwrap(groups(presets).inUse)
-        let update = try XCTUnwrap(presets.update(entry, with: Data([2]), at: location, recipePart: "audio", recipes: h.store))
-        h.bar.showPresetUpdate(update, in: presets)
-        XCTAssertEqual(h.bar.confirmation?.message, "“Desk” updated.")
-        XCTAssertEqual(h.bar.phase, .changing(recipe: "Office"))
+        XCTAssertTrue(h.bar.savePreset("Desk", in: "audio") {
+            guard let update = presets.update(entry, with: Data([2]), at: location, recipePart: "audio", recipes: h.store) else { return nil }
+            return { presets.undo(update, recipes: h.store, applyRecipe: false) }
+        })
+        XCTAssertEqual(h.bar.confirmation?.message, "Saved to preset Desk")
+        XCTAssertEqual(h.bar.changedSections, ["windows"])
         h.sched.advance(4)
         XCTAssertNil(h.bar.confirmation)
         XCTAssertTrue(h.store.isModified(recipe.id))
-        XCTAssertTrue(presets.undo(update, recipes: h.store))
-        XCTAssertEqual(groups(presets).inUse, entry)
+        XCTAssertEqual(groups(presets).inUse?.data, Data([2]))
+    }
+
+    func testUpdatingOneAudioPresetLeavesTheOtherAudioSectionUnsaved() throws {
+        let h = harness()
+        let presets = library()
+        h.audio.value = "flat/quiet"
+        func pair(_ data: Data) -> [String]? {
+            RecipeJSON.decode([String: String].self, from: data)?["v"]?.components(separatedBy: "/")
+        }
+        let mergeEQ: (Data, Data) -> Data? = { source, target in
+            guard let eq = pair(source)?.first, let effects = pair(target)?.last else { return nil }
+            return RecipeJSON.encode(["v": eq + "/" + effects])
+        }
+        h.bar.start(sections: [
+            SaveBarSection(id: "audio.eq", title: "Equalizer", recipePart: "audio",
+                           fingerprint: { pair($0)?.first.map { Data($0.utf8) } }, copy: mergeEQ),
+            SaveBarSection(id: "audio.outputfx", title: "System effects", recipePart: "audio",
+                           fingerprint: { pair($0)?.last.map { Data($0.utf8) } }),
+        ])
+        let recipe = h.store.create(name: "Office", symbol: "house", includes: ["audio"], devices: [], autoApply: false)
+        XCTAssertTrue(presets.saveNew("Desk", data: Data([1]), at: location))
+        let entry = try XCTUnwrap(groups(presets).inUse)
+        h.audio.value = "bass/loud"
+        h.bar.settingsDidChange()
+        XCTAssertEqual(h.bar.changedTitles, ["Equalizer", "System effects"])
+
+        XCTAssertTrue(h.bar.savePreset("Desk", in: "audio.eq", copy: mergeEQ) {
+            guard let update = presets.update(entry, with: Data([2]), at: location, recipePart: "audio",
+                                              recipes: h.store, mergeRecipePart: mergeEQ) else { return nil }
+            return { presets.undo(update, recipes: h.store, applyRecipe: false) }
+        })
+        XCTAssertEqual(h.store.active?.sections, RecipeStore.sections(["audio": "bass/quiet"]))
+        XCTAssertEqual(h.bar.changedTitles, ["System effects"])
+        h.bar.undoSave()
+        XCTAssertEqual(h.store.active?.sections, recipe.sections)
+        XCTAssertEqual(h.audio.value, "bass/loud")
+        XCTAssertEqual(h.bar.changedTitles, ["Equalizer", "System effects"])
     }
 
     func testUpdatingADifferentRowKeepsTheRecipeUnsaved() throws {
@@ -144,10 +187,11 @@ final class PresetTests: RecipeHarnessCase {
         let presets = library()
         let recipe = h.store.create(name: "Office", symbol: "house", includes: ["audio"], devices: [], autoApply: false)
         XCTAssertTrue(presets.saveNew("Desk", data: Data([1]), at: location))
+        XCTAssertTrue(presets.saveNew("Other", data: Data([3]), at: location))
         h.audio.value = "tuned"
-        let entry = try XCTUnwrap(groups(presets).builtIn.first)
+        let entry = try XCTUnwrap(groups(presets).yours.first { $0.name == "Desk" })
         let result = try XCTUnwrap(presets.update(entry, with: Data([2]), at: location, recipePart: "audio", recipes: h.store))
-        XCTAssertEqual(result.message, "“Flat” updated.")
+        XCTAssertEqual(result.message, "“Desk” updated.")
         XCTAssertTrue(h.store.isModified(recipe.id))
     }
 

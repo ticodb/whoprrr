@@ -1,7 +1,6 @@
 import Foundation
 
-/// The sentences of the save bar, the reminder and the recipe menu, built here so they can be tested and so the wording
-/// of the approved prototype lives in one place.
+/// Wording for recipe versions and automatic switches.
 public enum RecipeWording {
     /// "Audio", "Audio and Windows", "Audio, Windows and Clipboard".
     public static func list(_ items: [String]) -> String {
@@ -9,18 +8,6 @@ public enum RecipeWording {
         case 0: return ""
         case 1: return items[0]
         default: return items.dropLast().joined(separator: ", ") + " and " + items[items.count - 1]
-        }
-    }
-
-    /// "just now", "today at 18:42", "yesterday at 18:42", "on Tuesday at 18:42", "on 12 Nov at 18:42".
-    public static func whenPhrase(_ date: Date, now: Date, calendar: Calendar = .current, locale: Locale = .current) -> String {
-        if now.timeIntervalSince(date) >= 0, now.timeIntervalSince(date) < 60 { return "just now" }
-        let time = formatted(date, calendar, locale) { $0.timeStyle = .short; $0.dateStyle = .none }
-        switch dayName(date, now: now, calendar: calendar, locale: locale) {
-        case .today: return "today at \(time)"
-        case .yesterday: return "yesterday at \(time)"
-        case .weekday(let w): return "on \(w) at \(time)"
-        case .date(let d): return "on \(d) at \(time)"
         }
     }
 
@@ -40,19 +27,6 @@ public enum RecipeWording {
         case .weekday(let w): return "Go back to the version before \(w)’s save"
         case .date(let d): return "Go back to the version before the save on \(d)"
         }
-    }
-
-    /// "You left something on the stove."
-    public static let stoveTitle = "You left something on the stove."
-
-    /// "You changed Audio yesterday at 18:42 and did not save it to Desk."
-    public static func stoveDetail(parts: [String], recipe: String, changedAt: Date, now: Date, calendar: Calendar = .current, locale: Locale = .current) -> String {
-        "You changed \(list(parts)) \(whenPhrase(changedAt, now: now, calendar: calendar, locale: locale)) and did not save it to \(recipe)."
-    }
-
-    /// "Desk has changes you have not saved: Audio"
-    public static func unsavedSummary(recipe: String, parts: [String]) -> String {
-        "\(recipe) has changes you have not saved: \(parts.joined(separator: ", "))"
     }
 
     // MARK: Auto-switch

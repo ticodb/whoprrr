@@ -79,6 +79,14 @@ struct ShareFlowView: View {
                 }
                 if s.rows.isEmpty { Text("This recipe holds nothing that can be shared.").font(Brand.subheadline).foregroundStyle(.secondary) }
             }
+            if let sourceID = s.recipe.inputSourceID {
+                Toggle("Include typing language · \(s.recipe.inputSourceName ?? sourceID)", isOn: $s.includeTypingLanguage)
+                    .toggleStyle(.switch).controlSize(.small).font(Brand.subheadline)
+                    .onChange(of: s.includeTypingLanguage) { _, _ in s.rebuild() }
+                ForEach(Array(s.typingLanguageProblems.enumerated()), id: \.offset) { _, problem in
+                    Text(problem.message).font(Brand.caption).foregroundStyle(StatusChip.Tone.bad.text)
+                }
+            }
             if !s.blocking.isEmpty {
                 Text("A setting past a limit cannot be shared, so nothing can be sent yet. Switch that part off, or change the setting in your recipe. Your own recipe keeps its values; only the shared copy is limited.")
                     .font(Brand.caption).foregroundStyle(Brand.accentText).fixedSize(horizontal: false, vertical: true)

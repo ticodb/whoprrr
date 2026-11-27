@@ -5,12 +5,15 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 ## Unreleased
 
 ### Added
-- **One menu for presets** in Audio, Microphone, Windows, Keys and mouse, and Clipboard. It shows which preset is in use and whether you edited it. Update with one click or ⌘U. When the active recipe uses those settings, the same action saves the recipe and offers one Undo for both. Manage presets to rename them, or to hide or restore built-ins.
+- **Typing language per recipe.** Recipes can select an enabled keyboard input source. A manual language switch takes precedence until you reapply a recipe.
+- **Full backups.** Save all recipes, presets and per-device settings. A restore shows what it replaces and keeps a copy of the current data.
 - **Picklsss milestones** celebrate your first take, first accepted setup, first keep, and the ranks and takes that follow. Every take and share adds a pickle. See your burger grow on “My shared setups”.
 
 ### Changed
-- **Quieter recipe saves**: the page title shows “Cookin’” and the recipe name while you make changes. Open it to save, make a new recipe, or put things back. Press ⌘S anywhere in the main window to save. A reminder appears when you leave a page, and “Not yet” keeps it away until the next change. The saved message offers Undo for four seconds and stays while you hover over it. The recipe menu still keeps the previous saved version.
-- The menu-bar drawer shows what the last update check found and has one Settings button.
+- A pinned save bar names the sections you’ve edited and offers preset and recipe saves, Put back, and Undo. Press ⌘S to update the active recipe.
+- **One preset menu per section** shows built-ins, personal presets, and which preset is in use. Press ⌘U to update a personal preset. Manage presets to rename or delete yours, or hide and restore built-ins.
+- Open Whoprrr closes the menu-bar drawer and brings the main window to the current Space.
+- The menu-bar drawer shows what the last update check found.
 
 ### Fixed
 - System Audio Recording shows the macOS permission state when it can be read.

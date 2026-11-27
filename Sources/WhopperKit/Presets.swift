@@ -164,7 +164,7 @@ struct PresetCatalog: Codable, Equatable, Sendable {
     }
 }
 
-private struct PresetFile: Codable, Sendable {
+struct PresetFile: Codable, Sendable {
     struct Pending: Codable, Sendable {
         let previous: PresetCatalog
         let recipe: PresetRecipeEdit
@@ -199,12 +199,24 @@ public final class PresetLibrary: ObservableObject {
         let recipeEdit: PresetRecipeEdit?
     }
 
+    public struct Creation {
+        let preset: SavedPreset
+        let location: PresetLocation
+        let previous: PresetID?
+        let recipeEdit: PresetRecipeEdit?
+    }
+
     private let store: JSONStore<PresetFile>
-    public let preservesUnreadableFile: Bool
+    public private(set) var preservesUnreadableFile = false
     @Published private var catalog: PresetCatalog
 
     public init(url: URL? = nil, recipes: RecipeStore? = nil) {
         store = url.map { JSONStore<PresetFile>(url: $0) } ?? JSONStore<PresetFile>(name: "presets")
+        catalog = PresetCatalog()
+        reloadAfterBackup(recipes: recipes)
+    }
+
+    public func reloadAfterBackup(recipes: RecipeStore?) {
         let (file, protected) = Self.load(at: store.url)
         preservesUnreadableFile = protected
         catalog = file.catalog
@@ -251,10 +263,30 @@ public final class PresetLibrary: ObservableObject {
 
     @discardableResult
     public func saveNew(_ name: String, data: Data, at location: PresetLocation) -> Bool {
+        create(name, data: data, at: location) != nil
+    }
+
+    public func create(_ name: String, data: Data, at location: PresetLocation, recipePart: String? = nil,
+                       recipes: RecipeStore? = nil, mergeRecipePart: ((Data, Data) -> Data?)? = nil) -> Creation? {
         var next = catalog
+        let previous = next.selections[location]
         let added = next.save(name, data: data, for: location.control, replacing: false)
         next.select(.personal(added.id), at: location)
-        return commit(next)
+        let edit = recipes?.active.flatMap { recipes?.presetSave(for: $0, part: recipePart, merge: mergeRecipePart) }
+        guard commit(next, recipes: recipes, edit: edit) else { return nil }
+        return Creation(preset: added, location: location, previous: previous, recipeEdit: edit)
+    }
+
+    public func undoCreation(_ creation: Creation, recipes: RecipeStore? = nil) -> Bool {
+        let id = PresetID.personal(creation.preset.id)
+        guard catalog.record(id, for: creation.location.control) == .personal(creation.preset),
+              catalog.selections[creation.location] == id else { return false }
+        var next = catalog
+        next.delete(creation.preset.id, for: creation.location.control)
+        next.select(creation.previous, at: creation.location)
+        let edit = creation.recipeEdit.flatMap { recipes?.presetUndo($0) }
+        if creation.recipeEdit != nil, edit == nil { return false }
+        return commit(next, recipes: recipes, edit: edit)
     }
 
     @discardableResult
@@ -264,7 +296,8 @@ public final class PresetLibrary: ObservableObject {
 
     @discardableResult
     public func rename(_ id: PresetID, to name: String, for control: String) -> Bool {
-        change { $0.edit(id, for: control, name: name) }
+        guard case .personal = id else { return false }
+        return change { $0.edit(id, for: control, name: name) }
     }
 
     @discardableResult
@@ -288,28 +321,29 @@ public final class PresetLibrary: ObservableObject {
     }
 
     public func update(_ entry: PresetEntry, with data: Data, at location: PresetLocation,
-                       recipePart: String, recipes: RecipeStore) -> Update? {
+                       recipePart: String, recipes: RecipeStore,
+                       mergeRecipePart: ((Data, Data) -> Data?)? = nil) -> Update? {
         let control = location.control
-        guard let before = catalog.record(entry.id, for: control) else { return nil }
+        guard !entry.isFactory, let before = catalog.record(entry.id, for: control) else { return nil }
         var next = catalog
         next.edit(entry.id, for: control, data: data)
         guard let after = next.record(entry.id, for: control) else { return nil }
         // An update of a different row is a preset-only edit. It does not save unrelated live recipe changes.
         let recipe = catalog.selections[location] == entry.id ? recipes.active : nil
         let included = recipe.flatMap { $0.sections[recipePart] == nil ? nil : $0 }
-        let edit = included.flatMap { recipes.presetSave(for: $0) }
+        let edit = included.flatMap { recipes.presetSave(for: $0, part: recipePart, merge: mergeRecipePart) }
         guard commit(next, recipes: recipes, edit: edit) else { return nil }
         let message = included.map { "“\(entry.name)” updated and saved to \($0.name)." } ?? "“\(entry.name)” updated."
         return Update(message: message, id: entry.id, control: control, before: before, after: after, recipeEdit: edit)
     }
 
-    public func undo(_ update: Update, recipes: RecipeStore) -> Bool {
+    public func undo(_ update: Update, recipes: RecipeStore, applyRecipe: Bool = true) -> Bool {
         guard catalog.record(update.id, for: update.control) == update.after else { return false }
         let edit = update.recipeEdit.flatMap { recipes.presetUndo($0) }
         if update.recipeEdit != nil, edit == nil { return false }
         var next = catalog
         next.restore(update.before, id: update.id, for: update.control)
-        return commit(next, recipes: recipes, edit: edit, apply: true)
+        return commit(next, recipes: recipes, edit: edit, apply: applyRecipe)
     }
 
     private func change(_ edit: (inout PresetCatalog) -> Void) -> Bool {

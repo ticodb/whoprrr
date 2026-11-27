@@ -62,7 +62,7 @@ class RecipeHarnessCase: XCTestCase {
         let a = FakeSurface("audio", "home-audio"), w = FakeSurface("windows", "home-windows")
         s.register(a); s.register(w)
         let sched = ManualScheduler()
-        let bar = SaveBarController(store: s, scheduler: sched, now: { sched.now })
+        let bar = SaveBarController(store: s, scheduler: sched, draftURL: u.deletingLastPathComponent().appendingPathComponent("save-draft.json"))
         return Harness(store: s, bar: bar, sched: sched, audio: a, windows: w, url: u)
     }
 
@@ -72,208 +72,177 @@ class RecipeHarnessCase: XCTestCase {
     let road: [DeviceSignature] = [.init(kind: .audioOutput, key: "airpods", name: "AirPods")]
 }
 
-// MARK: Save bar, Cookin' and the waits
+// MARK: The pinned save bar
 
 final class SaveBarTests: RecipeHarnessCase {
     func makeDesk(_ h: Harness) -> Recipe {
         h.store.create(name: "Desk", symbol: "house", includes: ["audio", "windows"], devices: home, autoApply: true)
     }
-    func change(_ h: Harness, _ v: String) { h.audio.value = v; h.bar.settingsDidChange() }
 
-    func testNothingShowsWhileTheRecipeMatchesTheSettings() {
-        let h = harness(); _ = makeDesk(h)
-        h.bar.pageDidChange()
-        XCTAssertEqual(h.bar.phase, .idle)
-        XCTAssertNil(h.bar.reminderRecipe)
+    func change(_ h: Harness, _ value: String) {
+        h.audio.value = value
+        h.bar.settingsDidChange()
     }
 
-    func testTheMarkStaysQuietWhileYouTune() {
-        let h = harness(); _ = makeDesk(h)
+    func testFirstEditShowsImmediatelyAndAsManyEditsAsNeededStayInOneBar() {
+        let h = harness()
+        _ = makeDesk(h)
+        XCTAssertTrue(h.bar.changedSections.isEmpty)
         change(h, "bass+3")
+        XCTAssertEqual(h.bar.changedSections, ["audio"])
         h.sched.advance(60)
         change(h, "bass+4")
-        h.sched.advance(120)
-        XCTAssertEqual(h.bar.phase, .changing(recipe: "Desk"))
-        XCTAssertNil(h.bar.reminderRecipe)
-        XCTAssertEqual(h.sched.pending, 0)
-    }
-
-    func testLeavingChecksTheVeryLatestSetting() {
-        let h = harness(); _ = makeDesk(h)
-        h.audio.value = "bass+3"
-        h.bar.pageDidChange()
-        XCTAssertEqual(h.bar.phase, .changing(recipe: "Desk"))
-        XCTAssertEqual(h.bar.reminderRecipe, "Desk")
-    }
-
-    func testNotYetSuppressesTheReminderThroughMorePageChanges() {
-        let h = harness(); _ = makeDesk(h)
-        change(h, "bass+3")
-        h.bar.pageDidChange()
-        h.bar.dismissReminder()
+        h.windows.value = "tiled"
         h.bar.settingsDidChange()
-        h.bar.pageDidChange()
-        XCTAssertNil(h.bar.reminderRecipe)
-        XCTAssertEqual(h.bar.phase, .changing(recipe: "Desk"))
+        XCTAssertEqual(h.bar.changedSections, ["audio", "windows"])
+        XCTAssertNil(h.bar.confirmation)
+        XCTAssertEqual(h.sched.pending, 0)
     }
 
-    func testARealChangeRearmsTheReminderForTheNextPage() {
-        let h = harness(); _ = makeDesk(h)
+    func testPuttingAnEditedValueBackByHandClearsTheBar() {
+        let h = harness()
+        _ = makeDesk(h)
         change(h, "bass+3")
-        h.bar.pageDidChange()
-        XCTAssertEqual(h.bar.reminderRecipe, "Desk")
-        change(h, "bass+4")
-        XCTAssertNil(h.bar.reminderRecipe)
-        h.bar.pageDidChange()
-        XCTAssertEqual(h.bar.reminderRecipe, "Desk")
-    }
-
-    func testChangingItBackRemovesTheMarkAndReminder() {
-        let h = harness(); _ = makeDesk(h)
-        change(h, "bass+3")
-        h.bar.pageDidChange()
         change(h, "home-audio")
-        XCTAssertEqual(h.bar.phase, .idle)
-        XCTAssertNil(h.bar.reminderRecipe)
-        XCTAssertEqual(h.sched.pending, 0)
+        XCTAssertTrue(h.bar.changedSections.isEmpty)
+        XCTAssertNil(h.bar.confirmation)
     }
 
-    func testSavingShowsTheFillThenServedAndDismissesTheConfirmationAfterFourSeconds() {
-        let h = harness(); let r = makeDesk(h)
+    func testSavingConfirmsImmediatelyAndDismissesInFourSeconds() {
+        let h = harness()
+        let recipe = makeDesk(h)
         change(h, "bass+3")
-        h.bar.save()
-        XCTAssertEqual(h.bar.phase, .saving(recipe: "Desk"))
-        h.sched.advance(0.49)
-        XCTAssertFalse(h.bar.served)
-        h.sched.advance(0.01)
-        let saved = SaveBarController.Phase.saved(.init(message: "Saved to Desk.", undoRecipeID: r.id))
-        XCTAssertEqual(h.bar.phase, saved)
-        XCTAssertTrue(h.bar.served)
+        XCTAssertTrue(h.bar.save())
+        XCTAssertTrue(h.bar.changedSections.isEmpty)
+        XCTAssertEqual(h.bar.confirmation, .init(message: "Saved to recipe Desk", canUndo: true))
         h.sched.advance(3.99)
-        XCTAssertFalse(h.bar.served)
-        XCTAssertEqual(h.bar.phase, saved)
+        XCTAssertNotNil(h.bar.confirmation)
         h.sched.advance(0.01)
-        XCTAssertEqual(h.bar.phase, .idle)
-        XCTAssertEqual(h.sched.pending, 0)
-        XCTAssertFalse(h.store.isModified(r.id))
+        XCTAssertNil(h.bar.confirmation)
+        XCTAssertFalse(h.store.isModified(recipe.id))
     }
 
-    func testHoverPausesTheConfirmationAndLeavingResumesTheRemainingTime() {
-        let h = harness(); _ = makeDesk(h)
+    func testUndoRecipeSaveRestoresPreviousRecipeAndKeepsLiveEdits() {
+        let h = harness()
+        let recipe = makeDesk(h)
         change(h, "bass+3")
-        h.bar.save(); h.sched.advance(0.5)
-        h.sched.advance(3)
-        h.bar.hoverConfirmation(true)
-        h.sched.advance(30)
-        guard case .saved = h.bar.phase else { return XCTFail("Hovered confirmation should stay") }
-        h.bar.hoverConfirmation(false)
-        h.sched.advance(0.99)
-        guard case .saved = h.bar.phase else { return XCTFail("Confirmation should resume its remaining time") }
-        h.sched.advance(0.01)
-        XCTAssertEqual(h.bar.phase, .idle)
-    }
-
-    func testSavedSettingsAreWhatTheRecipeAppliesNow() {
-        let h = harness(); let r = makeDesk(h)
-        change(h, "bass+3"); h.bar.save()
-        h.audio.value = "other"
-        h.store.apply(r.id)
-        XCTAssertEqual(h.audio.value, "bass+3")
-    }
-
-    func testUndoOnTheConfirmationGoesBackAndLeavesTheNewerVersionToGoForwardTo() {
-        let h = harness(); let r = makeDesk(h)
-        change(h, "bass+3"); h.bar.save(); h.sched.advance(0.6)
+        h.windows.value = "tiled"
+        h.bar.settingsDidChange()
+        XCTAssertTrue(h.bar.save())
         h.bar.undoSave()
-        XCTAssertEqual(h.audio.value, "home-audio")                         // the settings are back
-        XCTAssertEqual(h.store.recipe(r.id)?.sections, RecipeStore.sections(["audio": "home-audio", "windows": "home-windows"]))
-        XCTAssertEqual(h.store.recipe(r.id)?.previous?.isNewer, true)       // and the undo can be undone
-        XCTAssertEqual(h.bar.phase, .idle)
-        XCTAssertFalse(h.store.isModified(r.id))
-        XCTAssertEqual(h.sched.pending, 0)
+        XCTAssertEqual(h.audio.value, "bass+3")
+        XCTAssertEqual(h.windows.value, "tiled")
+        XCTAssertEqual(h.store.recipe(recipe.id), recipe)
+        XCTAssertEqual(h.bar.changedSections, ["audio", "windows"])
+        XCTAssertTrue(h.store.isModified(recipe.id))
     }
 
-    func testChangingSomethingDuringTheConfirmationDropsIt() {
-        let h = harness(); _ = makeDesk(h)
-        change(h, "bass+3"); h.bar.save(); h.sched.advance(0.6)
-        change(h, "bass+4")
-        XCTAssertEqual(h.bar.phase, .changing(recipe: "Desk"))
-        h.bar.undoSave()                                                    // nothing to undo any more
-        XCTAssertEqual(h.audio.value, "bass+4")
-    }
-
-    func testChangingSomethingWhileSavingCancelsTheConfirmation() {
-        let h = harness(); _ = makeDesk(h)
-        change(h, "bass+3"); h.bar.save()
-        change(h, "bass+4")
-        h.sched.advance(0.6)
-        XCTAssertEqual(h.bar.phase, .changing(recipe: "Desk"))
-    }
-
-    func testSavingWhenNothingChangedOffersNoUndoAndKeepsTheEarlierVersion() {
-        let h = harness(); let r = makeDesk(h)
-        change(h, "bass+3"); h.bar.save(); h.sched.advance(11)
-        let before = h.store.recipe(r.id)!
-        h.bar.save(); h.sched.advance(0.6)
-        XCTAssertEqual(h.bar.phase, .saved(.init(message: "Saved to Desk.", undoRecipeID: nil)))
-        XCTAssertEqual(h.store.recipe(r.id)?.previous, before.previous)
-        XCTAssertEqual(h.store.recipe(r.id)?.sections, before.sections)
-    }
-
-    func testPutBackDiscardsTheChange() {
-        let h = harness(); let r = makeDesk(h)
+    func testNewEditInvalidatesUndo() {
+        let h = harness()
+        _ = makeDesk(h)
         change(h, "bass+3")
+        XCTAssertTrue(h.bar.save())
+        change(h, "bass+4")
+        XCTAssertNil(h.bar.confirmation)
+        h.bar.undoSave()
+        XCTAssertEqual(h.audio.value, "bass+4")
+        XCTAssertEqual(h.bar.changedSections, ["audio"])
+    }
+
+    func testNoConfirmationWhenThereIsNothingToSave() {
+        let h = harness()
+        _ = makeDesk(h)
+        XCTAssertFalse(h.bar.save())
+        XCTAssertNil(h.bar.confirmation)
+    }
+
+    func testPutBackWorksWithoutARecipeAndUndoRestoresTheDraft() {
+        let h = harness()
+        h.bar.start()
+        change(h, "bass+3")
+        h.windows.value = "tiled"
+        h.bar.settingsDidChange()
+        XCTAssertFalse(h.bar.save())
         h.bar.putBack()
         XCTAssertEqual(h.audio.value, "home-audio")
-        XCTAssertEqual(h.bar.phase, .idle)
-        XCTAssertFalse(h.store.isModified(r.id))
-        XCTAssertNil(h.store.recipe(r.id)?.previous)                        // nothing was saved
-        XCTAssertEqual(h.sched.pending, 0)
+        XCTAssertEqual(h.windows.value, "home-windows")
+        XCTAssertTrue(h.bar.changedSections.isEmpty)
+        XCTAssertEqual(h.bar.confirmation?.message, "Changes put back")
+        h.bar.undoSave()
+        XCTAssertEqual(h.audio.value, "bass+3")
+        XCTAssertEqual(h.windows.value, "tiled")
+        XCTAssertEqual(h.bar.changedSections, ["audio", "windows"])
     }
 
-    func testSaveAsNewLeavesTheOriginalAndMakesTheCopyActive() {
-        let h = harness(); let r = makeDesk(h)
+    func testPutBackLeavesSavedRecipeAndPreviousVersionIntact() {
+        let h = harness()
+        let recipe = makeDesk(h)
         change(h, "bass+3")
-        XCTAssertEqual(h.store.suggestedCopyName(of: r.id), "Desk 2")
-        h.bar.saveAsNew(name: "Desk 2")
-        let copy = h.store.active!
-        XCTAssertEqual(copy.name, "Desk 2"); XCTAssertNotEqual(copy.id, r.id)
-        XCTAssertEqual(copy.devices, home); XCTAssertEqual(copy.symbol, "house")
-        XCTAssertFalse(copy.autoApply)                                      // two recipes never fight over the same gear
-        XCTAssertEqual(copy.sections["audio"], RecipeJSON.encode(["v": "bass+3"]))
-        XCTAssertNil(copy.previous)
-        XCTAssertEqual(h.store.recipe(r.id)?.sections["audio"], RecipeJSON.encode(["v": "home-audio"]))   // original untouched
-        XCTAssertEqual(h.store.recipes.map(\.name), ["Desk", "Desk 2"])
-        XCTAssertEqual(h.bar.phase, .saving(recipe: "Desk 2"))
-        h.sched.advance(0.6)
-        XCTAssertEqual(h.bar.phase, .saved(.init(message: "Saved as “Desk 2”.", undoRecipeID: nil)))
-        XCTAssertFalse(h.store.isModified(copy.id))
+        h.bar.putBack()
+        XCTAssertEqual(h.store.recipe(recipe.id), recipe)
+        XCTAssertFalse(h.store.isModified(recipe.id))
     }
 
-    func testSwitchingRecipeClearsTheBar() {
-        let h = harness(); let r = makeDesk(h)
-        h.audio.value = "road"
-        let roadR = h.store.create(name: "Road", symbol: "airplane", includes: ["audio"], devices: road, autoApply: false)
-        change(h, "x")
-        XCTAssertEqual(h.bar.phase, .changing(recipe: "Road"))
-        h.store.apply(r.id)
-        XCTAssertEqual(h.bar.phase, .idle)
-        XCTAssertNotNil(roadR)
+    func testCreateRecipeWithoutAnActiveRecipeAndUndo() throws {
+        let h = harness()
+        h.bar.start()
+        change(h, "bass+3")
+        XCTAssertTrue(h.bar.saveAsNew(name: "Desk", devices: home))
+        let copy = try XCTUnwrap(h.store.active)
+        XCTAssertEqual(copy.name, "Desk")
+        XCTAssertEqual(copy.devices, home)
+        XCTAssertEqual(copy.sections, RecipeStore.sections(["audio": "bass+3", "windows": "home-windows"]))
+        XCTAssertTrue(h.bar.changedSections.isEmpty)
+        h.bar.undoSave()
+        XCTAssertNil(h.store.active)
+        XCTAssertTrue(h.store.recipes.isEmpty)
+        XCTAssertEqual(h.bar.changedSections, ["audio"])
     }
 
-    func testChangesLeftUnsavedLastTimeShowOnlyTheMark() {
-        let url = tmpDir().appendingPathComponent("recipes.json")
-        do {
-            let h = harness(url: url); let r = makeDesk(h)
-            change(h, "bass+3")
-            XCTAssertTrue(h.store.isModified(r.id))
-        }
-        let h2 = harness(url: url)
-        h2.audio.value = "bass+3"                    // the surfaces load what they saved themselves
-        h2.bar.start()
-        XCTAssertEqual(h2.bar.phase, .changing(recipe: "Desk"))
-        XCTAssertNil(h2.bar.reminderRecipe)
-        XCTAssertEqual(h2.sched.pending, 0)
+    func testCreateRecipeLeavesOriginalAndSelectsNewRecipe() throws {
+        let h = harness()
+        let recipe = makeDesk(h)
+        change(h, "bass+3")
+        XCTAssertTrue(h.bar.saveAsNew(name: "Desk 2"))
+        XCTAssertEqual(h.store.recipe(recipe.id), recipe)
+        XCTAssertEqual(h.store.active?.name, "Desk 2")
+        XCTAssertFalse(try XCTUnwrap(h.store.active).autoApply)
+    }
+
+    func testReapplyingRecipeClearsItsChanges() {
+        let h = harness()
+        let recipe = makeDesk(h)
+        change(h, "bass+3")
+        h.store.apply(recipe.id)
+        XCTAssertTrue(h.bar.changedSections.isEmpty)
+    }
+
+    func testDraftAndLandingSurviveRelaunchWithoutARecipe() {
+        let h = harness()
+        h.bar.start()
+        change(h, "bass+3")
+        h.bar.noteLeaving()
+        let reopened = harness(url: h.url)
+        reopened.audio.value = "bass+3"
+        reopened.bar.start()
+        XCTAssertEqual(reopened.bar.changedSections, ["audio"])
+        XCTAssertEqual(reopened.bar.takeLandingPart(), "audio")
+        XCTAssertNil(reopened.bar.takeLandingPart())
+        reopened.bar.putBack()
+        XCTAssertEqual(reopened.audio.value, "home-audio")
+    }
+
+    func testOldRecipeBaselineStillFindsAndLandsOnUnsavedEdit() throws {
+        let h = harness()
+        _ = makeDesk(h)
+        h.audio.value = "bass+3"
+        h.store.noteLeaving()
+        try FileManager.default.removeItem(at: h.url.deletingLastPathComponent().appendingPathComponent("save-draft.json"))
+        let reopened = harness(url: h.url)
+        reopened.audio.value = "bass+3"
+        reopened.bar.start()
+        XCTAssertEqual(reopened.bar.changedSections, ["audio"])
+        XCTAssertEqual(reopened.bar.takeLandingPart(), "audio")
     }
 }
 
@@ -377,20 +346,6 @@ final class PreviousVersionTests: RecipeHarnessCase {
         XCTAssertEqual(title(replaced: utc(2026, 11, 25, 18, 42), newer: true), "Go forward to the version you saved yesterday")
     }
 
-    func testStoveWording() {
-        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
-        let loc = Locale(identifier: "en_GB")
-        let now = utc(2026, 11, 26, 10, 0)
-        func detail(_ d: Date, _ parts: [String] = ["Audio"]) -> String { RecipeWording.stoveDetail(parts: parts, recipe: "Desk", changedAt: d, now: now, calendar: cal, locale: loc) }
-        XCTAssertEqual(RecipeWording.stoveTitle, "You left something on the stove.")
-        XCTAssertEqual(detail(utc(2026, 11, 25, 18, 42)), "You changed Audio yesterday at 18:42 and did not save it to Desk.")
-        XCTAssertEqual(detail(utc(2026, 11, 26, 9, 15), ["Audio", "Windows"]), "You changed Audio and Windows today at 09:15 and did not save it to Desk.")
-        XCTAssertEqual(detail(utc(2026, 11, 23, 7, 5), ["Audio", "Windows", "Clipboard"]), "You changed Audio, Windows and Clipboard on Monday at 07:05 and did not save it to Desk.")
-        XCTAssertEqual(detail(utc(2026, 11, 26, 9, 59, 30)), "You changed Audio just now and did not save it to Desk.")
-        XCTAssertEqual(detail(utc(2025, 12, 30, 12, 0)), "You changed Audio on 30 Dec 2025 at 12:00 and did not save it to Desk.")
-        XCTAssertEqual(RecipeWording.unsavedSummary(recipe: "Desk", parts: ["Audio", "Windows"]), "Desk has changes you have not saved: Audio, Windows")
-    }
-
     func utc(_ y: Int, _ m: Int, _ d: Int, _ h: Int, _ min: Int, _ s: Int = 0) -> Date {
         var c = DateComponents(); c.year = y; c.month = m; c.day = d; c.hour = h; c.minute = min; c.second = s
         var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
@@ -481,7 +436,7 @@ final class UnsavedStateTests: RecipeHarnessCase {
         let h2 = harness(url: url)                  // relaunch, but the audio settings are back to what the recipe holds
         h2.bar.start()
         XCTAssertNil(h2.store.stove)
-        XCTAssertEqual(h2.bar.phase, .idle)
+        XCTAssertTrue(h2.bar.changedSections.isEmpty)
         let h3 = harness(url: url)
         XCTAssertNil(h3.store.stove)                // and that was written down
     }
@@ -491,9 +446,9 @@ final class UnsavedStateTests: RecipeHarnessCase {
         _ = h.store.create(name: "Desk", symbol: "house", includes: ["audio"], devices: [], autoApply: false)
         h.audio.value = "x"; h.bar.settingsDidChange(); h.store.noteLeaving()
         XCTAssertNotNil(h.store.stove)
-        if case .changing = h.bar.phase {} else { XCTFail("the bar should show") }
+        XCTAssertEqual(h.bar.changedSections, ["audio"])
         h.bar.putBack()
-        XCTAssertNil(h.store.stove); XCTAssertEqual(h.bar.phase, .idle)
+        XCTAssertNil(h.store.stove); XCTAssertTrue(h.bar.changedSections.isEmpty)
     }
 }
 

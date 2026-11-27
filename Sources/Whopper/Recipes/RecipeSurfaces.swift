@@ -12,6 +12,10 @@ extension AudioModel: RecipeSurface {
     var recipeTitle: String { "Audio" }
     func captureRecipeData() -> Data? {
         syncPluginStates()
+        return captureLiveRecipeData()
+    }
+
+    func captureLiveRecipeData() -> Data? {
         var s = settings
         s.eq.permissionVerified = false       // a property of this Mac, never of a recipe
         s.knownNames = [:]
@@ -123,7 +127,6 @@ struct PresetSurface {
     let apply: (Data) -> Bool
     var canonical: (Data) -> Data = { $0 }
     var matches: ((Data, Data) -> Bool)? = nil
-    var factoryUpdate: (() -> Data?)? = nil
 
     var location: PresetLocation { PresetLocation(key, device: device) }
     var locationName: String { deviceName ?? title }
@@ -131,12 +134,6 @@ struct PresetSurface {
 
     func groups(in library: PresetLibrary) -> PresetGroups {
         library.groups(at: location, factory: factory, live: capture(), matches: matches ?? { canonical($0) == canonical($1) })
-    }
-
-    func captureUpdate(for entry: PresetEntry) -> Data? {
-        sync()
-        if entry.isFactory, let factoryUpdate { return factoryUpdate() }
-        return capture()
     }
 }
 
@@ -204,7 +201,7 @@ enum PresetSurfaces {
                               return mic.eq == eq
                           }
                           return canonical(MicPresetPayload.self, live) == canonical(MicPresetPayload.self, stored)
-                      }, factoryUpdate: { RecipeJSON.encode(a.settings.mic.eq) })
+                      })
     }
 
     static func routing(_ a: AudioModel) -> PresetSurface {
@@ -240,5 +237,86 @@ enum PresetSurfaces {
         case "input": input(Shared.input)
         default: nil
         }
+    }
+}
+
+// The save bar separates the parts that have their own preset even though a recipe stores audio as one section.
+@MainActor
+enum SaveBarSurfaces {
+    static var sections: [SaveBarSection] {
+        [
+            audio("audio.eq", "Equalizer", normalize: { eq in
+                var eq = eq
+                eq.dynamics = OutputDynamicsSettings()
+                eq.plugins = []
+                return eq
+            }, value: \.eq, write: { source, target in
+                target.eq.defaultProfile = source.defaultProfile
+                target.eq.profiles = source.profiles
+                target.eq.enabled = source.enabled
+                target.eq.targetUID = source.targetUID
+            }),
+            audio("audio.outputfx", "System effects", capture: { OutputFXPayload(dynamics: $0.eq.dynamics, plugins: $0.eq.plugins) }) {
+                $1.eq.dynamics = $0.dynamics
+                $1.eq.plugins = $0.plugins
+            },
+            audio("audio.mic", "Microphone", capture: { $0.mic }) { $1.mic = $0 },
+            audio("audio.routing", "Input and keep-awake", capture: { RoutingPayload(inputPin: $0.inputPin, keepAlive: $0.keepAlive) }) {
+                $1.inputPin = $0.inputPin
+                $1.keepAlive = $0.keepAlive
+            },
+            SaveBarSection(id: "input", title: "Keys"),
+            SaveBarSection(id: "windows", title: "Windows"),
+            SaveBarSection(id: "clipboard", title: "Clipboard"),
+            SaveBarSection(id: "display", title: "Display preset"),
+            SaveBarSection(id: "features", title: "Installed features"),
+        ]
+    }
+
+    private static func audio<Value: Codable>(_ id: String, _ title: String,
+                                              capture: @escaping (AudioSettings) -> Value,
+                                              write: @escaping (Value, inout AudioSettings) -> Void) -> SaveBarSection {
+        SaveBarSection(id: id, title: title, recipePart: "audio", fingerprint: { data in
+            RecipeJSON.decode(AudioSettings.self, from: data).flatMap { RecipeJSON.encode(capture($0)) }
+        }, copy: { source, target in
+            guard let source = RecipeJSON.decode(AudioSettings.self, from: source),
+                  var target = RecipeJSON.decode(AudioSettings.self, from: target) else { return nil }
+            write(capture(source), &target)
+            return RecipeJSON.encode(target)
+        })
+    }
+
+    private static func audio<Value: Codable>(_ id: String, _ title: String, normalize: @escaping (Value) -> Value,
+                                              value: KeyPath<AudioSettings, Value>,
+                                              write: @escaping (Value, inout AudioSettings) -> Void) -> SaveBarSection {
+        audio(id, title, capture: { normalize($0[keyPath: value]) }, write: write)
+    }
+
+    static func mergePreset(_ surface: PresetSurface, from live: Data, into stored: Data) -> Data? {
+        guard surface.recipePart == "audio" else { return live }
+        guard let source = RecipeJSON.decode(AudioSettings.self, from: live),
+              var target = RecipeJSON.decode(AudioSettings.self, from: stored) else { return nil }
+        switch surface.key {
+        case "audio.eq":
+            if let device = surface.device { target.eq.profiles[device] = source.eq.profiles[device] }
+            else { target.eq.defaultProfile = source.eq.defaultProfile }
+        case "audio.outputfx":
+            target.eq.dynamics = source.eq.dynamics
+            target.eq.plugins = source.eq.plugins
+        case "audio.mic":
+            let m = source.mic
+            target.mic.gainDB = m.gainDB
+            target.mic.highPassEnabled = m.highPassEnabled
+            target.mic.highPassHz = m.highPassHz
+            target.mic.eq = m.eq
+            target.mic.gate = m.gate
+            target.mic.compressor = m.compressor
+            target.mic.plugins = m.plugins
+        case "audio.routing":
+            target.inputPin = source.inputPin
+            target.keepAlive = source.keepAlive
+        default: return nil
+        }
+        return RecipeJSON.encode(target)
     }
 }

@@ -218,6 +218,12 @@ final class AudioModel: ObservableObject {
     // MARK: Equalizer
 
     /// The output device whose EQ is being edited: the chosen target, else the current default output.
+    func reloadAfterBackup() {
+        var restored = store.load(default: AudioSettings())
+        restored.eq.permissionVerified = settings.eq.permissionVerified
+        settings = restored
+    }
+
     var eqDeviceUID: String? { settings.eq.targetUID ?? defaultOutputUID }
     var eqPerDevice: Bool { eqDeviceUID.map { settings.eq.profiles[$0] != nil } ?? false }
 

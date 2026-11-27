@@ -65,6 +65,10 @@ public final class PresetStore: @unchecked Sendable {
     private func loadLocked() throws -> [Preset] {
         guard FileManager.default.fileExists(atPath: url.path) else { return [] }
         guard let data = try? Data(contentsOf: url) else { throw PresetStoreError.unreadable }
+        return try Self.decode(data)
+    }
+
+    public static func decode(_ data: Data) throws -> [Preset] {
         let dec = JSONDecoder()
         dec.dateDecodingStrategy = .iso8601
         // Read the version first so a newer file is refused rather than half-parsed and overwritten.

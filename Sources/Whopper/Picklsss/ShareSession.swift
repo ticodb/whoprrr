@@ -28,6 +28,7 @@ final class ShareSession: ObservableObject, Identifiable {
 
     @Published var step: Step = .goes
     @Published var partsOn: Set<String> = []
+    @Published var includeTypingLanguage = true
     @Published var title: String
     @Published var line = ""
     @Published var handleText = ""
@@ -49,7 +50,10 @@ final class ShareSession: ObservableObject, Identifiable {
     init(controller: PicklsssController, recipe: Recipe, mode: Mode) {
         self.controller = controller; self.recipe = recipe; self.mode = mode
         title = recipe.name
-        if case .update(let r) = mode { title = r.title }
+        if case .update(let r) = mode {
+            title = r.title
+            includeTypingLanguage = r.includesTypingLanguage ?? true
+        }
         handleText = controller.handle ?? ""
         rebuild(initial: true)
     }
@@ -87,8 +91,9 @@ final class ShareSession: ObservableObject, Identifiable {
         "display": "Brightness, contrast, color and sharpness for one monitor",
     ]
 
-    private func run(_ parts: Set<String>) -> SharedSetupExportResult {
-        SharedSetupExport.export(title: titleOrPlaceholder, line: lineOrPlaceholder, recipe: recipe, parts: parts, display: controller.displaySources())
+    private func run(_ parts: Set<String>, includeLanguage: Bool) -> SharedSetupExportResult {
+        SharedSetupExport.export(title: titleOrPlaceholder, line: lineOrPlaceholder, recipe: recipe, parts: parts,
+                                 display: controller.displaySources(), includeTypingLanguage: includeLanguage)
     }
     private var titleOrPlaceholder: String { title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Setup" : title.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var lineOrPlaceholder: String { line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "A shared setup." : line.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -101,13 +106,13 @@ final class ShareSession: ObservableObject, Identifiable {
         }
         defer { if initial { partsOn.subtract(rows.filter(\.empty).map(\.part)); rebuild() } }
         rows = candidates.map { p in
-            let one = run([p])
+            let one = run([p], includeLanguage: false)
             let left = one.removed.filter { $0.part == p || $0.part == nil }.map(\.summary) + one.adjusted
             // "A setup must hold at least one part" for a single part means that part came out empty: nothing to share, not a broken limit.
             let empty = one.setup == nil && !one.violations.isEmpty && one.violations.allSatisfy { $0.line == "parts" }
             return PartRow(part: p, detail: Self.detail[p] ?? "", left: left, violations: empty ? [] : one.violations, empty: empty, changed: nil)
         }
-        export = partsOn.isEmpty ? nil : run(partsOn)
+        export = partsOn.isEmpty ? nil : run(partsOn, includeLanguage: includeTypingLanguage)
         if case .update = mode, let prev = previous, let now = export?.setup {
             rows = rows.map { r in var r = r; r.changed = prev.settings[r.part] != now.settings[r.part]; return r }
         }
@@ -117,7 +122,10 @@ final class ShareSession: ObservableObject, Identifiable {
 
     /// Every violation of the parts that are switched on: the screen says which line and why, and nothing can be sent.
     var blocking: [SharedSetupViolation] { rows.filter { partsOn.contains($0.part) }.flatMap(\.violations) }
-    var leftOut: [String] { (export?.removed.map(\.summary) ?? []) + (export?.adjusted ?? []) }
+    var leftOut: [String] {
+        let language = !includeTypingLanguage && recipe.inputSourceID != nil ? ["Typing language"] : []
+        return (export?.removed.map(\.summary) ?? []) + (export?.adjusted ?? []) + language
+    }
     var gearTags: [String] { export?.setup?.gear.map(\.model) ?? [] }
     var canContinue: Bool { !partsOn.isEmpty && blocking.isEmpty && export?.setup != nil }
     var fieldProblems: [String] {
@@ -132,7 +140,15 @@ final class ShareSession: ObservableObject, Identifiable {
         if case .update = mode { return changedAnything }
         return ShareFields.lineProblem(line) == nil && (!needsHandle || ShareFields.handleProblem(handleText) == nil)
     }
-    var changedAnything: Bool { rows.contains { partsOn.contains($0.part) && $0.changed == true } || (record.map { Set($0.parts) != partsOn } ?? false) }
+    var changedAnything: Bool {
+        rows.contains { partsOn.contains($0.part) && $0.changed == true } ||
+            (record.map { Set($0.parts) != partsOn } ?? false) ||
+            previous.map { $0.typingLanguage != export?.setup?.typingLanguage } == true
+    }
+
+    var typingLanguageProblems: [SharedSetupViolation] {
+        export?.violations.filter { $0.line.hasPrefix("typingLanguage") } ?? []
+    }
 
     func next() { message = nil; step = .describe }
     func back() { message = nil; errors = []; step = .goes }
@@ -170,7 +186,8 @@ final class ShareSession: ObservableObject, Identifiable {
             outcome = out
             controller.rememberHandle(out.handle)
             controller.recordShared(SharedRecord(picklsssId: out.id, recipeID: recipe.id, title: s.title, state: out.state.rawValue, version: out.version, parts: s.parts,
-                                                 digest: ShareDigest.of(setup: s), sharedAt: Date()))
+                                                 digest: ShareDigest.of(setup: s), sharedAt: Date(),
+                                                 includesTypingLanguage: includeTypingLanguage))
             step = .result
             let had = controller.hasExtra
             await controller.refreshMine()

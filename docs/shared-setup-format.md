@@ -33,11 +33,14 @@ Where the same checks run: **when sharing** (the Mac refuses to produce a docume
 | `gear` | array | 0 to 20 items `{ "role", "model" }` (section 3). The author's devices. Parts point at them by position. |
 | `requirements` | object | `{ "plugins", "minMacOS", "permissions" }` (section 3). |
 | `settings` | object | One key per part named in `parts`, and no other key. Each value is described in section 4. |
+| `typingLanguage` | optional object | `{ "id", "name" }` for an explicitly shared macOS keyboard input source. The ID matches `^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$`. The display name has 1 to 100 UTF-16 code units and follows the personal-text checks. Omit the field when typing language is left out. |
 
 The same words are the card fields of the shelf's `share` call (`title`, `line`, `parts`, `gear`, `requirements`); the app sends the
 document in `document` and these fields beside it, and they are the same values. Roles are these words: `microphone`, `speaker`,
 `display`, `keyboard`, `mouse`, `other`. (The examples in `picklsss.md` say `speakers` and `monitor`; the Mac writes `speaker` and
 `display`. The server must not compare roles to a fixed list: a newer Mac may know more roles.)
+
+The receiver leaves the language off if the input source is unavailable or disabled. The same rule applies when a recipe from a backup made under another key is opened as a shared setup.
 
 ## 3. Gear and requirements
 

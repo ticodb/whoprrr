@@ -248,7 +248,11 @@ final class PicklsssController: ObservableObject {
             Shared.showWindow(page: .picklsss)
             return
         }
-        let session = TakeSession(controller: self, file: setup, madeBy: opened.madeBy, name: name)
+        openFileSetup(setup, madeBy: opened.madeBy, name: name)
+    }
+
+    func openFileSetup(_ setup: SharedSetup, madeBy: String?, name: String) {
+        let session = TakeSession(controller: self, file: setup, madeBy: madeBy, name: name)
         fileProblem = nil
         take = session
         route = .shelf
@@ -484,9 +488,10 @@ final class PicklsssController: ObservableObject {
     /// The recipe moved on since it was shared: "Your copy is newer than the shared one". Saving locally never publishes; this only says so.
     func isNewerThanShared(_ r: SharedRecord) -> Bool {
         guard let rid = r.recipeID, let recipe = recipes.recipe(rid), r.state != ShelfState.removed.rawValue, !r.digest.isEmpty else { return false }
-        let key = "\(r.picklsssId)|\(recipe.updatedAt.timeIntervalSince1970)|\(r.digest)"
+        let key = "\(r.picklsssId)|\(recipe.updatedAt.timeIntervalSince1970)|\(r.digest)|\(recipe.inputSourceID ?? "")|\(recipe.inputSourceName ?? "")"
         if let v = dirtyCache[key] { return v }
-        let out = SharedSetupExport.export(title: r.title, line: "A shared setup.", recipe: recipe, parts: Set(r.parts), display: displaySources())
+        let out = SharedSetupExport.export(title: r.title, line: "A shared setup.", recipe: recipe, parts: Set(r.parts), display: displaySources(),
+                                           includeTypingLanguage: r.includesTypingLanguage ?? true)
         let v = out.setup.map { ShareDigest.of(setup: $0) != r.digest } ?? false
         dirtyCache[key] = v
         return v
@@ -532,9 +537,13 @@ final class PicklsssController: ObservableObject {
         let v = ProcessInfo.processInfo.operatingSystemVersion
         let checker = LivePermissionChecker()
         let plugins = PluginCatalog.effects().map { InstalledPlugin(name: $0.name, maker: $0.manufacturer, type: $0.type, subtype: $0.subtype, manufacturerCode: $0.manufacturerCode) }
+        Shared.typingLanguage.refresh()
         return ReceiverEnvironment(gear: Gear.current(), plugins: plugins, macOS: "\(v.majorVersion).\(v.minorVersion)",
                                    permissions: Dictionary(uniqueKeysWithValues: Permission.allCases.map { ($0, checker.status($0)) }),
-                                   sections: recipes.snapshot(recipes.surfaceKeys))
+                                   sections: recipes.snapshot(recipes.surfaceKeys),
+                                   installedInputSources: Shared.typingLanguage.installedIDs,
+                                   enabledInputSources: Shared.typingLanguage.enabledIDs,
+                                   currentInputSource: Shared.typingLanguage.currentID)
     }
 }
 
