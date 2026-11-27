@@ -32,7 +32,7 @@ On your order page, press **Activate this Mac**. The link opens Whoprrr and acti
 
 Setup remembers where you stopped. Follow the guide for each grant, then try the features in **Taste test**. If you skip a grant, its features stay off with their settings saved. The menu bar offers **Continue** when you’re ready. [What each grant is for](permissions.md)
 
-On the first launch of a new build, Whoprrr checks what it can quietly. It opens a renewal window if a grant needs attention. System Audio Recording needs a chime you start yourself.
+On the first launch of a new build, Whoprrr checks quietly while your features run. It opens a renewal window only if a grant clearly stopped working, and pauses only the features that need it.
 
 ## 4. Optional: the virtual microphone
 

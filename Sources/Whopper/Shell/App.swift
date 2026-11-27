@@ -121,8 +121,8 @@ enum Shared {
         // Without a valid pass nothing runs in the background; features come back the moment one arrives, with no restart.
         let license = LicenseController.shared
         let setup = SetupController.shared
-        features.$enabled.combineLatest(setup.$progress, setup.$auditing, license.$state).sink { enabled, progress, auditing, state in
-            let runtime = license.skipped || state.isLicensed ? SetupController.allowed(enabled, progress: progress, auditing: auditing) : []
+        features.$enabled.combineLatest(setup.$progress, license.$state).sink { enabled, progress, state in
+            let runtime = license.skipped || state.isLicensed ? SetupController.allowed(enabled, progress: progress) : []
             audio.setActive(audio: runtime.contains(.audio), mic: runtime.contains(.microphone))
             windows.setActive(runtime.contains(.windows))
             clipboard.setActive(runtime.contains(.clipboard))

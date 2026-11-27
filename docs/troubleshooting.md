@@ -42,7 +42,7 @@ hidutil property --set '{"UserKeyMapping":[]}'
 - **Display → Log** lists every command and whether it was read back and verified.
 
 ## Permissions look granted but nothing works after an update
-Ad-hoc beta builds can lose grants on update. The renewal window lists the grants that need attention. You can also open **Permissions** or choose **Continue** in the menu bar.
+Ad-hoc beta builds can lose grants on update. Features keep running while Whoprrr checks; the renewal window opens only when a grant is clearly off and lists only those grants. You can also open **Permissions** or choose **Continue** in the menu bar.
 
 If the switch is on and the taste test still fails, choose **Reset and ask again**. It clears that one grant for Whoprrr. If macOS refuses the reset, turn the switch off and on in System Settings. For Input Monitoring, choose **Quit & Reopen**. If a feature still fails, park it and use **Copy diagnostics**.
 

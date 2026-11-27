@@ -74,14 +74,27 @@ final class SetupChecks: TasteProbing {
         case .windows:
             return await checkWindows(mode)
         case .remap:
+            if mode == .afterUpdate {
+                // No synthetic keys after an update: something else may be bound to them. Only open and close a test tap.
+                let open = Shared.input.tapOpensForSetup()
+                let grant: Permission = CGPreflightPostEventAccess() ? .inputMonitoring : .accessibility
+                return open ? TasteFinding(.works, detail: "Whoprrr can watch the keyboard.")
+                    : TasteFinding(.notWorking, grants: [grant], detail: "Whoprrr could not watch the keyboard.")
+            }
             let worked = await Shared.input.verifyForSetup()
             let grant: Permission = CGPreflightPostEventAccess() ? .inputMonitoring : .accessibility
             return worked ? TasteFinding(.works, detail: "A test key went through the remapper.")
                 : TasteFinding(.notWorking, grants: [grant], detail: "No remapped test key arrived.")
         case .audio:
             if Shared.audio.settings.eq.enabled {
-                // A new recording can trigger TCC. A sample from a previous build cannot prove the current grant.
-                return mode == .setup && heardChime
+                if mode == .afterUpdate {
+                    // macOS can't report this grant. The equalizer's saved proof stands; without it, nothing is parked.
+                    return Shared.audio.settings.eq.permissionVerified
+                        ? TasteFinding(.works, detail: "The equalizer has heard sound before.")
+                        : TasteFinding(.needsCheck, detail: "Play something to confirm the equalizer.")
+                }
+                // A new recording can trigger TCC, so only the chime the person started counts here.
+                return heardChime
                     ? TasteFinding(.works, detail: "A short chime went through the equalizer.")
                     : TasteFinding(.needsCheck, grants: [.systemAudio], detail: "Play a chime to confirm System Audio Recording.")
             }

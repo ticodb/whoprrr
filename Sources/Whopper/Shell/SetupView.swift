@@ -148,6 +148,9 @@ struct SetupView: View {
             grantRows
             HStack {
                 Button(grantAction(grant)) { setup.beginCurrentGrant(grant) }.buttonStyle(.brand)
+                if setup.isGranted(grant), setup.isStale(grant), setup.canReset(grant) {
+                    Button("Reset and ask again") { setup.retry(grant, reset: true) }.buttonStyle(.brandQuiet)
+                }
                 Button("Not now") { skipGrant = grant }.buttonStyle(.brandPlain)
             }.disabled(setup.working)
         } else {
