@@ -11,6 +11,15 @@ final class DailyCheckHook: NSObject, SPUUpdaterDelegate {
     func updater(_ updater: SPUUpdater, didFinishLoading appcast: SUAppcast) {
         Task { @MainActor in await PicklsssController.shared.runDailyIfDue(fromUpdateCheck: true) }
     }
+
+    // What the last check found, for the version line in the menu-bar panel and the About page.
+    func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        let version = item.displayVersionString
+        Task { @MainActor in UpdateController.shared.found(version) }
+    }
+    func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
+        Task { @MainActor in UpdateController.shared.found(nil) }
+    }
 }
 
 @MainActor
@@ -21,6 +30,9 @@ final class UpdateController: ObservableObject {
     private lazy var controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: hook, userDriverDelegate: nil)
     @Published private(set) var canCheck = false
     @Published private(set) var isAvailable = false
+    /// The newer version the last check found ("0.9.0 beta 7"), or nil when this build is the latest we know of.
+    @Published private(set) var newerVersion: String?
+    private var lastLook = Date.distantPast
     private var observation: NSKeyValueObservation?
 
     private var updater: SPUUpdater { controller.updater }
@@ -40,6 +52,18 @@ final class UpdateController: ObservableObject {
             let value = u.canCheckForUpdates
             Task { @MainActor in self?.canCheck = value }
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.lookQuietly() }
+    }
+
+    fileprivate func found(_ version: String?) { newerVersion = version }
+
+    /// Asks the feed whether a newer version exists without showing anything, at most once an hour, and only while
+    /// automatic checks are on. The answer arrives through the delegate.
+    func lookQuietly() {
+        guard isAvailable, updater.automaticallyChecksForUpdates, updater.canCheckForUpdates,
+              Date().timeIntervalSince(lastLook) > 3600 else { return }
+        lastLook = Date()
+        updater.checkForUpdateInformation()
     }
 
     func checkForUpdates() { controller.checkForUpdates(nil) }

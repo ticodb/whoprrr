@@ -14,5 +14,7 @@ enum AppInfo {
     /// "beta 1", "rc 2"… empty for a final release.
     static var channel: String { Bundle.main.infoDictionary?["WhoprrrReleaseLabel"] as? String ?? "" }
     static var versionLine: String { "Version \(version)" + (channel.isEmpty ? "" : " \(channel)") + " (build \(build))" }
+    /// "0.9.0 beta 6 (build 32)", for the menu-bar panel.
+    static var shortVersionLine: String { version + (channel.isEmpty ? "" : " \(channel)") + " (build \(build))" }
     static var isBeta: Bool { channel.lowercased().contains("beta") }
 }

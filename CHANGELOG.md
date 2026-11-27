@@ -2,6 +2,15 @@
 
 All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://semver.org); betas are labelled `0.9.0 beta N`.
 
+## 0.9.0 beta 6: the version in the menu-bar panel
+
+Released 2026-11-27.
+
+### Changed
+- **The menu-bar panel shows which version you have.** The bottom line now reads, for example, "0.9.0 beta 6 (build 34)" in place of "Check for Updates…". Press it to open the About page. It is violet while you have the latest version and turns to the notice yellow, with "Update available", when a newer one is out.
+- **Updates are offered on the About page.** A new Updates card says "Up to date" with "Check now", or names the newer version with an Install button. Whoprrr asks the update feed quietly, at most once an hour, and only while automatic update checks are on.
+- **One way into Settings from the panel**: the gear at the top right (⌘,). The second "Settings…" button at the bottom is gone.
+
 ## 0.9.0 beta 5: buy Picklsss straight from the app
 
 Released 2026-11-27.
