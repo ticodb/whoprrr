@@ -11,15 +11,24 @@ final class DailyCheckHook: NSObject, SPUUpdaterDelegate {
     func updater(_ updater: SPUUpdater, didFinishLoading appcast: SUAppcast) {
         Task { @MainActor in await PicklsssController.shared.runDailyIfDue(fromUpdateCheck: true) }
     }
-
-    // What the last check found, for the version line in the menu-bar panel and the About page.
+    // What the last look at the update feed found, for the menu-bar panel's update line.
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         let version = item.displayVersionString
-        Task { @MainActor in UpdateController.shared.found(version) }
+        Task { @MainActor in UpdateController.shared.found(.available(version)) }
     }
     func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
-        Task { @MainActor in UpdateController.shared.found(nil) }
+        Task { @MainActor in UpdateController.shared.found(.upToDate) }
     }
+    func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
+        // "No update" also arrives as an abort; only a real failure (no network, a broken feed) is shown as one.
+        let noUpdate = (error as NSError).domain == SUSparkleErrorDomain && (error as NSError).code == SUNoUpdateError
+        Task { @MainActor in if !noUpdate { UpdateController.shared.found(.failed) } }
+    }
+}
+
+/// What the panel's update line says.
+enum UpdateStatus: Equatable {
+    case unknown, checking, upToDate, available(String), failed
 }
 
 @MainActor
@@ -30,9 +39,9 @@ final class UpdateController: ObservableObject {
     private lazy var controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: hook, userDriverDelegate: nil)
     @Published private(set) var canCheck = false
     @Published private(set) var isAvailable = false
-    /// The newer version the last check found ("0.9.0 beta 7"), or nil when this build is the latest we know of.
+    @Published private(set) var status: UpdateStatus = .unknown
     @Published private(set) var newerVersion: String?
-    private var lastLook = Date.distantPast
+    private var lastLook: Date?
     private var observation: NSKeyValueObservation?
 
     private var updater: SPUUpdater { controller.updater }
@@ -55,18 +64,35 @@ final class UpdateController: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.lookQuietly() }
     }
 
-    fileprivate func found(_ version: String?) { newerVersion = version }
-
-    /// Asks the feed whether a newer version exists without showing anything, at most once an hour, and only while
-    /// automatic checks are on. The answer arrives through the delegate.
-    func lookQuietly() {
-        guard isAvailable, updater.automaticallyChecksForUpdates, updater.canCheckForUpdates,
-              Date().timeIntervalSince(lastLook) > 3600 else { return }
-        lastLook = Date()
-        updater.checkForUpdateInformation()
-    }
+    func lookQuietly() { look(force: false) }
 
     func checkForUpdates() { controller.checkForUpdates(nil) }
+
+    /// Automatic checks respect the About setting and share a throttle across the window and drawer.
+    func look(force: Bool) {
+        guard isAvailable, status != .checking, updater.canCheckForUpdates else { return }
+        if !force {
+            guard updater.automaticallyChecksForUpdates else { return }
+            if let lastLook, Date().timeIntervalSince(lastLook) < 3600 { return }
+        }
+        let started = Date()
+        lastLook = started
+        status = .checking
+        updater.checkForUpdateInformation()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
+            guard let self, self.lastLook == started, self.status == .checking else { return }
+            self.status = .failed
+        }
+    }
+
+    fileprivate func found(_ status: UpdateStatus) {
+        switch status {
+        case .available(let version): newerVersion = version
+        case .upToDate: newerVersion = nil
+        default: break
+        }
+        self.status = status
+    }
 
     var automaticallyChecks: Bool {
         get { updater.automaticallyChecksForUpdates }
