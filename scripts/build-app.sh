@@ -56,6 +56,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSMicrophoneUsageDescription</key><string>Whoprrr reads your microphone so it can apply effects and route it to the virtual mic. Audio is processed live and never recorded or sent anywhere.</string>
   <key>NSCameraUseContinuityCameraDeviceType</key><true/>
   <key>NSHighResolutionCapable</key><true/>
+  <key>CFBundleURLTypes</key><array><dict>
+    <key>CFBundleURLName</key><string>gg.tico.whopper.activation</string>
+    <key>CFBundleTypeRole</key><string>Viewer</string>
+    <key>CFBundleURLSchemes</key><array><string>whoprrr</string></array>
+  </dict></array>
+  <key>NSLocalNetworkUsageDescription</key><string>Whoprrr looks for Android TVs on your network when you choose Add a TV.</string>
+  <key>NSBonjourServices</key><array><string>_androidtvremote2._tcp</string></array>
   <key>CFBundleDocumentTypes</key><array><dict>
     <key>CFBundleTypeName</key><string>Whoprrr shared setup</string>
     <key>CFBundleTypeRole</key><string>Viewer</string>

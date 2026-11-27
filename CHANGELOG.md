@@ -4,6 +4,9 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 
 ## Unreleased
 
+- **Activate this Mac** on your order page hands Whoprrr a one-time setup code. The app can still activate with the key from your receipt.
+- **Add a TV** under Extras finds Android TVs on your network, verifies and installs Whoprrr TV, then opens it with a setup code from your order.
+
 - **Setup** takes this Mac from activation through a gear scan, recipe, permission guide and taste test in one window. It picks up where you left off and keeps the settings of any parked feature.
 - **After an update**, Whoprrr checks permissions quietly and offers to renew only the grants that need attention. System Audio Recording is checked when you play the setup chime. **Reset and ask again** clears a single supported grant for Whoprrr.
 

@@ -10,7 +10,7 @@ The source is free under the MIT licence, and you can [build it yourself](buildi
 shasum -a 256 Whoprrr-<version>.zip
 ```
 
-The ready build asks for your key the first time it opens (it is in your receipt email and on your downloads page). It contacts whoprrr.app to activate, then again about once a week; see [PRIVACY.md](../PRIVACY.md). A release build you make yourself (`scripts/build-app.sh`) asks for a key too; only debug builds (`swift build`) skip the check, for development.
+The ready build activates from your order page. You can type the key from your receipt email instead. It contacts whoprrr.app to activate, then again about once a week; see [PRIVACY.md](../PRIVACY.md). A release build you make yourself (`scripts/build-app.sh`) asks for a key too; only debug builds (`swift build`) skip the check, for development.
 
 ## 2. First launch (beta builds are not notarized yet)
 
@@ -28,7 +28,7 @@ Whoprrr lives in the menu bar (no Dock icon unless its window is open). On first
 
 ## 3. Set up this Mac
 
-Activate with the key from your receipt. Choose **Scan my setup** to review a recipe for the gear connected to this Mac. The recipe lists the grants its switched-on lines need. **Set up by hand** goes straight to Features.
+On your order page, press **Activate this Mac**. The link opens Whoprrr and activates this Mac. If the link expires, get a fresh one from the order page or choose **Type my key instead**. Then choose **Scan my setup** to review a recipe for the gear connected to this Mac. The recipe lists the grants its switched-on lines need. **Set up by hand** goes straight to Features.
 
 Setup remembers where you stopped. Follow the guide for each grant, then try the features in **Taste test**. If you skip a grant, its features stay off with their settings saved. The menu bar offers **Continue** when you’re ready. [What each grant is for](permissions.md)
 
@@ -44,6 +44,12 @@ On the first launch of a new build, Whoprrr checks what it can quietly. It opens
 - **Settings…** (⌘,) for everything else.
 - Make a **Recipe** once your setup is the way you like it.
 - **⌃⌥⇧⌘⎋** pauses all key and mouse rules if anything feels wrong.
+
+## Add a TV
+
+If your order includes Whoprrr TV, open **Extras → Add a TV**. Keep the Mac and the Android TV on the same network. If your TV shows **Needs one setting**, follow the steps for turning on USB debugging. You can also enter the TV’s address from **Settings → Network**.
+
+Choose **Install** on the TV you want. If this Mac has no `adb`, Whoprrr downloads Google’s Android SDK Platform-Tools on the first install. On the TV, choose **Always allow from this computer**, then **Allow**. The Mac checks the APK, installs it and opens Whoprrr TV with a short-lived setup code from your order. Finish setup on the TV.
 
 ## Uninstall
 

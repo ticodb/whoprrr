@@ -24,6 +24,7 @@ struct MainWindowView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        HandoverNotice()
                         StoveReminder()
                         NoticesBar()
                         if case .feature(let feature) = nav.page, let finding = setup.progress.parked[feature] {

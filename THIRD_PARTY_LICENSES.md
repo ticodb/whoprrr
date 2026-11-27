@@ -1,7 +1,6 @@
 # Third-party licenses
 
-Whoprrr is MIT licensed (see `LICENSE`). This file lists the only third-party source code that ships inside the project, with its
-license text. Credits for work Whoprrr learned from but does not contain are in [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md).
+Whoprrr is MIT licensed (see `LICENSE`). This file lists third-party code shipped with the project and tools it can download. Credits for work Whoprrr learned from but does not contain are in [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md).
 
 ## m1ddc
 
@@ -33,6 +32,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Google Android SDK Platform-Tools
+
+Add a TV uses the Android Debug Bridge (`adb`). If a copy is already installed on the Mac, Whoprrr uses it. Otherwise, on the first TV install Whoprrr downloads Google’s official macOS Platform-Tools archive and extracts it into Whoprrr’s Application Support folder. Google distributes it under the Android Software Development Kit License Agreement. The downloaded archive includes Google’s notices. [Android SDK Platform-Tools and license terms](https://developer.android.com/tools/releases/platform-tools)
 
 ## Not bundled
 
