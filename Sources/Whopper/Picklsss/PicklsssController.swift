@@ -488,10 +488,10 @@ final class PicklsssController: ObservableObject {
     /// The recipe moved on since it was shared: "Your copy is newer than the shared one". Saving locally never publishes; this only says so.
     func isNewerThanShared(_ r: SharedRecord) -> Bool {
         guard let rid = r.recipeID, let recipe = recipes.recipe(rid), r.state != ShelfState.removed.rawValue, !r.digest.isEmpty else { return false }
-        let key = "\(r.picklsssId)|\(recipe.updatedAt.timeIntervalSince1970)|\(r.digest)|\(recipe.inputSourceID ?? "")|\(recipe.inputSourceName ?? "")"
+        let key = "\(r.picklsssId)|\(recipe.updatedAt.timeIntervalSince1970)|\(r.digest)"
         if let v = dirtyCache[key] { return v }
         let out = SharedSetupExport.export(title: r.title, line: "A shared setup.", recipe: recipe, parts: Set(r.parts), display: displaySources(),
-                                           includeTypingLanguage: r.includesTypingLanguage ?? true)
+                                           includeTypingLanguage: false)
         let v = out.setup.map { ShareDigest.of(setup: $0) != r.digest } ?? false
         dirtyCache[key] = v
         return v

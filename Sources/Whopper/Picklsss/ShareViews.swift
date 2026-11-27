@@ -79,7 +79,7 @@ struct ShareFlowView: View {
                 }
                 if s.rows.isEmpty { Text("This recipe holds nothing that can be shared.").font(Brand.subheadline).foregroundStyle(.secondary) }
             }
-            if let sourceID = s.recipe.inputSourceID {
+            if s.canIncludeTypingLanguage, let sourceID = s.recipe.inputSourceID {
                 Toggle("Include typing language · \(s.recipe.inputSourceName ?? sourceID)", isOn: $s.includeTypingLanguage)
                     .toggleStyle(.switch).controlSize(.small).font(Brand.subheadline)
                     .onChange(of: s.includeTypingLanguage) { _, _ in s.rebuild() }

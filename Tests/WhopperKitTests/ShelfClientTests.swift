@@ -136,6 +136,27 @@ final class ShelfClientTests: XCTestCase {
         XCTAssertEqual(t.sent[0].path, "api/shelf/update")
     }
 
+    func testShelfV1ShareAndUpdateOmitPrivateFileTypingLanguage() async throws {
+        let reply = #"{"id":"i","state":"public","version":1,"handle":"ana.kitchen"}"#
+        let (c, t) = make((200, reply), (200, reply))
+        var request = shareRequest()
+        request.document = .object([
+            "formatVersion": .int(1),
+            "typingLanguage": .object(["id": .string("com.apple.keylayout.Spanish-ISO"), "name": .string("Spanish – ISO")]),
+        ])
+
+        _ = try await c.share(pass: "P", request)
+        _ = try await c.update(pass: "P", id: "i", note: nil, request)
+
+        XCTAssertEqual(t.sent.map(\.path), ["api/shelf/share", "api/shelf/update"])
+        for index in t.sent.indices {
+            let document = try XCTUnwrap(t.body(index)["document"] as? [String: Any])
+            XCTAssertEqual(Set(document.keys), ["formatVersion"])
+            XCTAssertEqual(document["formatVersion"] as? Int, 1)
+        }
+        XCTAssertNotNil(request.document["typingLanguage"])
+    }
+
     // MARK: Every error is a typed case, and the server's words are kept
 
     func fail(_ status: Int, _ body: String, path: String = "api/shelf/take") async -> ShelfFailure? {

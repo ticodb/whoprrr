@@ -50,15 +50,13 @@ final class ShareSession: ObservableObject, Identifiable {
     init(controller: PicklsssController, recipe: Recipe, mode: Mode) {
         self.controller = controller; self.recipe = recipe; self.mode = mode
         title = recipe.name
-        if case .update(let r) = mode {
-            title = r.title
-            includeTypingLanguage = r.includesTypingLanguage ?? true
-        }
+        if case .update(let r) = mode { title = r.title }
         handleText = controller.handle ?? ""
         rebuild(initial: true)
     }
 
     var needsHandle: Bool { mode == .share && controller.handle == nil }
+    var canIncludeTypingLanguage: Bool { mode == .file }
     var isUpdate: Bool { if case .update = mode { return true }; return false }
     var record: SharedRecord? { if case .update(let r) = mode { return r }; return nil }
     var headline: String {
@@ -112,7 +110,7 @@ final class ShareSession: ObservableObject, Identifiable {
             let empty = one.setup == nil && !one.violations.isEmpty && one.violations.allSatisfy { $0.line == "parts" }
             return PartRow(part: p, detail: Self.detail[p] ?? "", left: left, violations: empty ? [] : one.violations, empty: empty, changed: nil)
         }
-        export = partsOn.isEmpty ? nil : run(partsOn, includeLanguage: includeTypingLanguage)
+        export = partsOn.isEmpty ? nil : run(partsOn, includeLanguage: canIncludeTypingLanguage && includeTypingLanguage)
         if case .update = mode, let prev = previous, let now = export?.setup {
             rows = rows.map { r in var r = r; r.changed = prev.settings[r.part] != now.settings[r.part]; return r }
         }
@@ -123,7 +121,10 @@ final class ShareSession: ObservableObject, Identifiable {
     /// Every violation of the parts that are switched on: the screen says which line and why, and nothing can be sent.
     var blocking: [SharedSetupViolation] { rows.filter { partsOn.contains($0.part) }.flatMap(\.violations) }
     var leftOut: [String] {
-        let language = !includeTypingLanguage && recipe.inputSourceID != nil ? ["Typing language"] : []
+        let language: [String]
+        if recipe.inputSourceID == nil { language = [] }
+        else if !canIncludeTypingLanguage { language = ["Typing language is available when you send a setup file."] }
+        else { language = includeTypingLanguage ? [] : ["Typing language"] }
         return (export?.removed.map(\.summary) ?? []) + (export?.adjusted ?? []) + language
     }
     var gearTags: [String] { export?.setup?.gear.map(\.model) ?? [] }
@@ -141,9 +142,7 @@ final class ShareSession: ObservableObject, Identifiable {
         return ShareFields.lineProblem(line) == nil && (!needsHandle || ShareFields.handleProblem(handleText) == nil)
     }
     var changedAnything: Bool {
-        rows.contains { partsOn.contains($0.part) && $0.changed == true } ||
-            (record.map { Set($0.parts) != partsOn } ?? false) ||
-            previous.map { $0.typingLanguage != export?.setup?.typingLanguage } == true
+        rows.contains { partsOn.contains($0.part) && $0.changed == true } || (record.map { Set($0.parts) != partsOn } ?? false)
     }
 
     var typingLanguageProblems: [SharedSetupViolation] {
@@ -186,8 +185,7 @@ final class ShareSession: ObservableObject, Identifiable {
             outcome = out
             controller.rememberHandle(out.handle)
             controller.recordShared(SharedRecord(picklsssId: out.id, recipeID: recipe.id, title: s.title, state: out.state.rawValue, version: out.version, parts: s.parts,
-                                                 digest: ShareDigest.of(setup: s), sharedAt: Date(),
-                                                 includesTypingLanguage: includeTypingLanguage))
+                                                 digest: ShareDigest.of(setup: s), sharedAt: Date()))
             step = .result
             let had = controller.hasExtra
             await controller.refreshMine()

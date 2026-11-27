@@ -40,7 +40,7 @@ document in `document` and these fields beside it, and they are the same values.
 `display`, `keyboard`, `mouse`, `other`. (The examples in `picklsss.md` say `speakers` and `monitor`; the Mac writes `speaker` and
 `display`. The server must not compare roles to a fixed list: a newer Mac may know more roles.)
 
-The receiver leaves the language off if the input source is unavailable or disabled. The same rule applies when a recipe from a backup made under another key is opened as a shared setup.
+The optional field is available when sending a setup file. Shelf submissions and updates use the existing v1 fields. The receiver leaves the language off if the input source is unavailable or disabled. The same rule applies when a recipe from a backup made under another key is opened as a shared setup.
 
 ## 3. Gear and requirements
 

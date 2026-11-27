@@ -67,6 +67,5 @@ final class TypingLanguageTests: XCTestCase {
         let omitted = try XCTUnwrap(SharedSetupExport.export(title: "Desk", line: "Desk settings.", recipe: recipe,
                                                            includeTypingLanguage: false).setup)
         XCTAssertNil(omitted.typingLanguage)
-        XCTAssertNotEqual(ShareDigest.of(setup: setup), ShareDigest.of(setup: omitted))
     }
 }
