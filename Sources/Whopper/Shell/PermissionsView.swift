@@ -36,7 +36,8 @@ struct PermissionsView: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                if status != .granted && !users.isEmpty && status != .unknown {
+                // System Audio Recording cannot be asked for ahead of time: macOS asks when the equalizer first captures sound.
+                if status != .granted && !users.isEmpty && status != .unknown && p != .systemAudio {
                     Button("Grant") { PermissionRequester.request(p); refreshSoon() }.buttonStyle(.brand)
                 }
                 Button("Open pane") { NSWorkspace.shared.open(p.settingsURL) }.buttonStyle(.link).font(Brand.caption)
