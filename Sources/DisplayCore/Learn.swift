@@ -77,11 +77,17 @@ public final class LearnedStore: @unchecked Sendable {
 
     private func loadLocked() throws -> [LearnedSetting] {
         guard FileManager.default.fileExists(atPath: url.path) else { return [] }
-        guard let data = try? Data(contentsOf: url), let f = try? JSONDecoder().decode(File.self, from: data) else {
-            throw PresetStoreError.unreadable
-        }
-        guard f.version <= 1 else { throw PresetStoreError.unsupportedVersion(f.version) }
-        return f.settings
+        guard let data = try? Data(contentsOf: url) else { throw PresetStoreError.unreadable }
+        return try Self.decode(data)
+    }
+
+    public static func decode(_ data: Data) throws -> [LearnedSetting] {
+        struct Header: Decodable { let version: Int }
+        let decoder = JSONDecoder()
+        guard let header = try? decoder.decode(Header.self, from: data) else { throw PresetStoreError.unreadable }
+        guard header.version <= 1 else { throw PresetStoreError.unsupportedVersion(header.version) }
+        guard let file = try? decoder.decode(File.self, from: data) else { throw PresetStoreError.unreadable }
+        return file.settings
     }
 
     /// Merges observed values when the same display+code is learned again.

@@ -41,6 +41,7 @@ public enum SharedSetupExport {
         "Clipboard history and snippets",
         "Any text a key rule would type",
         "The list of apps the clipboard ignores",
+        "Your app volumes. The list of apps you use is personal.",
         "Serial numbers",
         "Display IDs, audio device IDs and any other identifier of your devices",
         "The names you gave your devices (only the model name is kept)",
@@ -50,17 +51,22 @@ public enum SharedSetupExport {
         "Shell commands",
         "Rules that open apps",
         "Rule names",
+        "Your saved presets",
+        "Equalizer curves and key rules for gear outside the recipe",
         "The names of your display presets and their notes",
     ]
 
     public static func export(title: String, line: String, recipe: Recipe, parts requested: Set<String>? = nil,
-                              display: [String: SharedDisplaySource] = [:]) -> SharedSetupExportResult {
+                              display: [String: SharedDisplaySource] = [:], includeTypingLanguage: Bool = true) -> SharedSetupExportResult {
         var b = Builder(recipe: recipe, display: display)
         let want = requested ?? Set(SharedSetupTable.parts)
         b.build(want)
         let gear = b.gear
+        let language = includeTypingLanguage ? recipe.inputSourceID.map {
+            SharedTypingLanguage(id: $0, name: recipe.inputSourceName ?? $0)
+        } : nil
         let setup = SharedSetup(title: title, line: line, parts: SharedSetupTable.parts.filter { b.settings[$0] != nil }, gear: gear,
-                                requirements: b.requirements(), settings: b.settings)
+                                requirements: b.requirements(), settings: b.settings, typingLanguage: language)
         let report = SharedSetupLimits.check(setup)
         guard report.ok else {
             return SharedSetupExportResult(setup: nil, violations: report.violations, removed: b.removed, adjusted: b.adjusted, report: report)

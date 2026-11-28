@@ -15,7 +15,7 @@ struct PermissionsView: View {
             ForEach(listedPermissions) { p in
                 BrandCard { row(p) }
             }
-            Text("Whoprrr asks only for what your installed features need. Grants are listed, never requested, until you open the pane.")
+            Text("Whoprrr asks only for what your installed features need. Each grant or repair starts with an explanation, then one step at a time.")
                 .font(Brand.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .onAppear(perform: refresh)
@@ -51,14 +51,17 @@ struct PermissionsView: View {
                 if failed != nil { StatusChip(text: TasteResult.notWorking.title, tone: .bad) }
                 else if !parked.isEmpty { StatusChip(text: TasteResult.parked.title, tone: .warn) }
                 else if checked && (status == .granted || status == .unknown) { StatusChip(text: TasteResult.works.title, tone: .good) }
-                if !parked.isEmpty {
-                    Button("Continue setup") { setup.continueParked(parked) }.buttonStyle(.brand)
-                } else if !users.isEmpty && status != .granted && (!checked || status != .unknown) && p != .camera {
-                    Button("Grant") { setup.guideGrant(p); refreshSoon() }.buttonStyle(.brand)
+                if !users.isEmpty, p != .camera {
+                    let resuming = setup.permissionFlow?.permission == p && setup.permissionFlow?.stage != .ready
+                    let repair = status == .granted || failed != nil || !parked.isEmpty
+                    Button(resuming ? "Resume…" : repair ? "Repair…" : "Set up…") {
+                        if resuming { setup.guideGrant(p) }
+                        else if repair, setup.canReset(p) { setup.retry(p, reset: true) }
+                        else { setup.guideGrant(p) }
+                        refreshSoon()
+                    }.buttonStyle(.brand).disabled(setup.working)
                 }
-                if p != .micDriver {
-                    Button("Open pane") { NSWorkspace.shared.open(p.settingsURL) }.buttonStyle(.link).font(Brand.caption)
-                }
+
             }
         }
     }

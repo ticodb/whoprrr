@@ -5,13 +5,20 @@ import WhopperKit
 /// The app proper: a sidebar of features and a roomy page for each. Setup, rule editing and every setting live here;
 /// the menu-bar panel (QuickView) is only for glancing and quick actions.
 struct MainWindowView: View {
+    var inDrawer = false
+
+    private var presentsSheets: Bool {
+        inDrawer ? nav.drawerOpen : nav.windowOpen && !nav.drawerOpen
+    }
     @EnvironmentObject var features: FeatureStore
     @EnvironmentObject var input: InputController
     @EnvironmentObject var nav: WindowNav
     @EnvironmentObject var recipes: RecipeStore
+    @EnvironmentObject private var saveBar: SaveBarController
     @ObservedObject private var setup = SetupController.shared
     @EnvironmentObject private var presetActions: PresetActions
     @ObservedObject private var license = LicenseController.shared
+    @ObservedObject private var backups = Shared.backups
     @ObservedObject private var picklsss = PicklsssController.shared
 
     var body: some View {
@@ -20,13 +27,20 @@ struct MainWindowView: View {
 
     private var app: some View {
         HStack(spacing: 0) {
-            sidebar.frame(width: 232)
-            Divider()
+            if !inDrawer {
+                sidebar.frame(width: 232)
+                Divider()
+            }
             VStack(spacing: 0) {
+                if !saveBar.changedSections.isEmpty || saveBar.confirmation != nil {
+                    SaveBarArea()
+                        .padding(.horizontal, 28)
+                        .frame(maxWidth: 680, alignment: .leading)
+                        .padding(.top, 14)
+                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         HandoverNotice()
-                        StoveReminder()
                         NoticesBar()
                         if case .feature(let feature) = nav.page, let finding = setup.progress.parked[feature] {
                             BrandCard {
@@ -35,37 +49,57 @@ struct MainWindowView: View {
                                     setup.continueParked([feature])
                                 }.buttonStyle(.brand)
                             }
-                            PageContent(page: nav.page).environment(\.showsRecipeSaveMark, true).disabled(true)
-                        } else { PageContent(page: nav.page).environment(\.showsRecipeSaveMark, true) }
+                            PageContent(page: nav.page).disabled(true)
+                        } else { PageContent(page: nav.page) }
                     }
                     .padding(28)
                     .frame(maxWidth: 680, alignment: .topLeading)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
-                // Reminders and confirmations are shared by every page of the window.
-                SaveBarArea()
-                    .padding(.horizontal, 28).padding(.bottom, 14)
-                    .frame(maxWidth: 680 + 56, alignment: .leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .overlay(alignment: .top) {
-                if let milestone = picklsss.milestone {
-                    PicklsssMilestoneView(milestone: milestone)
-                        .id(milestone.id)
-                        .padding(.top, 76)
+                .overlay(alignment: .top) {
+                    if let milestone = picklsss.milestone {
+                        PicklsssMilestoneView(milestone: milestone)
+                            .id(milestone.id)
+                            .padding(.top, 76)
+                    }
                 }
             }
         }
-        .frame(minWidth: 860, minHeight: 620)
+        .frame(minWidth: inDrawer ? nil : 860, minHeight: inDrawer ? nil : 620)
         .tint(Brand.violetBright)
-        .sheet(item: Binding(get: { nav.windowOpen ? recipes.pendingSwitch : nil },
-                             set: { if $0 == nil, recipes.pendingSwitch != nil { recipes.resolveSwitch(.stay) } })) { AutoSwitchSheet(pending: $0) }
-        .sheet(item: $picklsss.sharing) { ShareFlowView(s: $0) }
-        .alert("Presets", isPresented: Binding(get: { presetActions.problem != nil },
-                                              set: { if !$0 { presetActions.problem = nil } })) {
+        .sheet(item: Binding(get: { presentsSheets ? recipes.pendingSwitch : nil },
+                             set: { if presentsSheets, $0 == nil, recipes.pendingSwitch != nil { recipes.resolveSwitch(.stay) } })) { AutoSwitchSheet(pending: $0) }
+        .sheet(item: Binding(get: { presentsSheets ? picklsss.sharing : nil },
+                             set: { if presentsSheets { picklsss.sharing = $0 } })) { ShareFlowView(s: $0) }
+        .sheet(item: Binding(get: { presentsSheets ? backups.review : nil },
+                             set: { if presentsSheets { backups.review = $0 } })) { BackupReviewSheet(controller: backups, item: $0) }
+        .alert(backups.problemTitle,
+               isPresented: Binding(get: { presentsSheets && backups.problem != nil }, set: { if presentsSheets, !$0 { backups.problem = nil } })) {
+            if backups.problem == .newer {
+                Button("Check for Updates") { UpdateController.shared.checkForUpdates() }
+                    .disabled(!UpdateController.shared.canCheck)
+                Button("Cancel", role: .cancel) {}
+            } else if backups.problem == .picklsssNeeded {
+                Button("Get Picklsss") { backups.getPicklsss() }
+                Button("Cancel", role: .cancel) {}
+            } else {
+                Button("OK", role: .cancel) {}
+            }
+        } message: {
+            if case .message(let text) = backups.problem { Text(text) }
+            if backups.problem == .picklsssNeeded { Text("Taking a setup from a backup made with another key needs Picklsss.") }
+        }
+        .alert("Presets", isPresented: Binding(get: { presentsSheets && presetActions.problem != nil },
+                                              set: { if presentsSheets, !$0 { presetActions.problem = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(presetActions.problem ?? "")
+        }
+        .alert("Could not finish", isPresented: Binding(get: { presentsSheets && saveBar.problem != nil },
+                                                      set: { if presentsSheets, !$0 { saveBar.problem = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(saveBar.problem ?? "")
         }
         .onChange(of: features.enabled) { _, _ in
             if case .feature(let f) = nav.page, !features.isEnabled(f) { nav.page = .features }

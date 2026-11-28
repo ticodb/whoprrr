@@ -16,6 +16,7 @@ final class SetupController: ObservableObject {
     @Published private(set) var note: String?
     @Published private(set) var checking = false
     @Published private(set) var tasteStarted = false
+    @Published private(set) var audioCheckRunning = false
 
     private let store = JSONStore<SetupProgress>(name: "onboarding")
     private let checks = SetupChecks()
@@ -23,6 +24,7 @@ final class SetupController: ObservableObject {
     private lazy var guide = GrantGuide(setup: self)
     private var inputRestartRequested = false
     private var waitingForSwitchOff: Permission?
+    private var audioCheckTimeout: Task<Void, Never>?
     private var beganLicensedLaunch = false
     private var run: Task<Void, Never>?
     private static let legacyKey = "gg.tico.whoprrr.welcomed"
@@ -36,7 +38,7 @@ final class SetupController: ObservableObject {
 
     var step: SetupStep { LicenseController.shared.isLicensed ? progress.step : .key }
     var showsSetup: Bool { step != .complete || renewalVisible }
-    var canAutoSwitch: Bool { progress.step == .complete && !auditing && progress.renewal.isEmpty }
+    var canAutoSwitch: Bool { progress.step == .complete && !auditing && progress.renewal.isEmpty && !hasPermissionAssistant }
 
     var plan: StarterPlan? { progress.scan.map { StarterRecipes.plan(for: $0, firstSetup: true) } }
     var proposed: [Feature: Set<Permission>] {
@@ -95,6 +97,16 @@ final class SetupController: ObservableObject {
         guard !beganLicensedLaunch else { return }
         beganLicensedLaunch = true
         refreshGrants()
+        if var flow = progress.permissionFlow {
+            flow.reopened()
+            if let name = flow.returnPage, let page = AppPage(name: name) { Shared.nav.page = page }
+            progress.permissionFlow = flow
+            if !flow.suspended {
+                auditing = false
+                showPermissionAssistant()
+                return
+            }
+        }
         if progress.step != .complete {
             // A recording from a prior process can't prove a fresh tap still has access.
             progress.grantedByTest = []
@@ -211,78 +223,179 @@ final class SetupController: ObservableObject {
         if !auditing { run?.cancel() }
     }
 
-    /// "Open the switch for me" never resets. Clearing a stale grant is only the explicit "Reset and ask again" button.
-    func beginCurrentGrant(_ grant: Permission) {
-        startGrant(grant, requireToggle: isGranted(grant) && isStale(grant))
+    var permissionFlow: PermissionFlow? { progress.permissionFlow }
+    var hasPermissionAssistant: Bool { permissionFlow.map { !$0.suspended } ?? false }
+    var needsPermissionRestart: Bool {
+        permissionFlow?.permission == .inputMonitoring && inputRestartRequested && states[.inputMonitoring] == .granted
+    }
+    var nextAssistantGrant: Permission? {
+        guard permissionFlow?.tracksSetup == true, permissionFlow?.stage == .ready else { return nil }
+        return currentGrant
     }
 
-    private func startGrant(_ grant: Permission, requireToggle: Bool = false, track: Bool = true) {
+    func beginCurrentGrant(_ grant: Permission) {
+        presentPermission(grant, repair: isStale(grant) && canReset(grant), track: true)
+    }
+
+    private func presentPermission(_ grant: Permission, repair: Bool, track: Bool, replace: Bool = false) {
         guard !working, LicenseController.shared.isLicensed,
               ProcessInfo.processInfo.environment["WHOPPER_NO_START"] != "1" else { return }
-        note = requireToggle ? "Turn this switch off, then on again." : nil
-        waitingForSwitchOff = requireToggle ? grant : nil
-        attemptedGrant = grant
-        if track { progress.askingAgain = grant }
-        if track, grant == .inputMonitoring, requireToggle || states[grant] != .granted { inputRestartRequested = true }
-        guide.show(grant)
-        switch grant {
-        case .systemAudio:
-            checks.startChimeTest()
-        case .microphone, .camera:
-            if states[grant] == .notDetermined { PermissionRequester.request(grant) }
-            else { openSettings(grant) }
-        case .micDriver:
-            if !Shared.audio.driverInstalled { Shared.audio.installDriver() }
-            note = Shared.audio.installMessage
-        case .inputMonitoring:
-            PermissionRequester.request(grant)
-            openSettings(grant)
-        case .accessibility:
-            if states[grant] != .granted { PermissionRequester.request(grant) }
-            openSettings(grant)
-        case .paste:
-            // The System Settings row appears after the first programmatic read.
-            if #available(macOS 15.4, *), NSPasteboard.general.accessBehavior == .default {
-                // Give the explicit user action time to finish before a background-style read.
-                Task {
-                    try? await Task.sleep(for: .milliseconds(600))
-                    guard attemptedGrant == grant, !track || progress.askingAgain == grant else { return }
+        stopGuide()
+        if !replace, var flow = progress.permissionFlow, flow.stage != .ready {
+            flow.suspended = false
+            progress.permissionFlow = flow
+        } else {
+            var flow = PermissionFlow(grant, repair: repair, tracksSetup: track)
+            flow.returnPage = Shared.nav.page.storageName
+            progress.permissionFlow = flow
+            note = nil
+        }
+        showPermissionAssistant()
+    }
+
+    func showPermissionAssistant() { guide.show() }
+
+    /// Continue is the single point that can clear a grant or launch system UI.
+    func continuePermissionAssistant() {
+        guard !working, var flow = permissionFlow, flow.begin() else { return }
+        progress.permissionFlow = flow
+        working = true
+        let grant = flow.permission
+        for feature in users(of: grant) { progress.findings[feature] = nil }
+        run = Task {
+            var resetOK = true
+            if flow.repair {
+                if progress.reserveReset(grant) {
+                    await Shared.audio.stopForPermissionReset(grant)
+                    resetOK = await taste.reset(grant)
+                } else { resetOK = false }
+                progress.grantedByTest.remove(grant)
+            }
+            guard !Task.isCancelled else { working = false; return }
+            progress.skipped.remove(grant)
+            if flow.tracksSetup { progress.askingAgain = grant }
+            attemptedGrant = grant
+            refreshGrants()
+            waitingForSwitchOff = flow.repair && !resetOK && states[grant] == .granted ? grant : nil
+            note = waitingForSwitchOff == nil ? nil : "Whoprrr couldn’t clear the old grant. Turn its switch off, then on again."
+            if grant == .inputMonitoring { inputRestartRequested = flow.repair || states[grant] != .granted }
+            flow.wait()
+            progress.permissionFlow = flow
+            working = false
+            switch grant {
+            case .accessibility, .inputMonitoring:
+                // Opening the pane alone avoids a TCC alert and a Settings window competing for focus.
+                // The guide offers the manual +/Add path if this copy isn't listed.
+                openSettings(grant)
+            case .systemAudio:
+                if states[grant] == .denied { openSettings(grant) }
+                else { checks.prepareAudioPermission() }
+            case .microphone, .camera:
+                if states[grant] == .notDetermined { PermissionRequester.request(grant) }
+                else { openSettings(grant) }
+            case .micDriver:
+                if !Shared.audio.driverInstalled { Shared.audio.installDriver() }
+                note = Shared.audio.installMessage
+            case .paste:
+                if #available(macOS 15.4, *), NSPasteboard.general.accessBehavior == .default {
+                    // Only the read that creates the native consent prompt. Settings is a separate user action.
                     _ = NSPasteboard.general.string(forType: .string)
-                    openSettings(grant)
-                }
-            } else { openSettings(grant) }
+                } else { openSettings(grant) }
+            }
         }
     }
 
-    func openSettings(_ grant: Permission) { NSWorkspace.shared.open(grant.settingsURL) }
-    func playChime() { checks.playChime() }
+    func openSettings(_ grant: Permission) {
+        NSWorkspace.shared.open(grant.settingsURL)
+        guide.placeBesideSettingsOnce()
+    }
 
-    func pollGrant(_ grant: Permission) -> Bool {
+    func runAssistantAudioCheck() {
+        guard let flow = permissionFlow, flow.permission == .systemAudio,
+              flow.stage == .waiting || flow.stage == .checkAudio else { return }
+        if audioCheckRunning { checks.playChime(); return }
+        audioCheckRunning = true
+        note = nil
+        checks.startChimeTest()
+        audioCheckTimeout?.cancel()
+        audioCheckTimeout = Task {
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled, audioCheckRunning else { return }
+            audioCheckRunning = false
+            checks.stopChimeTest()
+            note = "The chime didn’t get through. Check your current output and the permission switch, then try again."
+        }
+    }
+
+    func playChime() { runAssistantAudioCheck() }
+
+    func pollPermissionAssistant() {
+        guard var flow = permissionFlow, !flow.suspended,
+              flow.stage == .waiting || flow.stage == .checkAudio else { return }
+        let grant = flow.permission
         refreshGrant(grant)
-        if waitingForSwitchOff == grant {
-            guard states[grant] != .granted else { return false }
-            waitingForSwitchOff = nil
+        if grant == .systemAudio {
+            if audioCheckRunning, checks.heardChime {
+                checks.rememberAudioProof()
+                progress.grantedByTest.insert(grant)
+            } else {
+                if states[grant] == .granted { flow.needsAudioCheck(); progress.permissionFlow = flow }
+                return
+            }
+        } else {
+            if waitingForSwitchOff == grant {
+                guard states[grant] != .granted else { return }
+                waitingForSwitchOff = nil
+            }
+            guard isGranted(grant) else { return }
         }
-        if grant == .systemAudio && checks.heardChime {
-            progress.grantedByTest.insert(grant)
-            return true
-        }
-        return isGranted(grant)
-    }
-
-    func grantArrived(_ grant: Permission) {
-        if grant == .systemAudio { checks.stopChimeTest() }
         if progress.askingAgain == grant { progress.askingAgain = nil }
         progress.renewedGrants.insert(grant)
-        openWindow()
+        flow.finish()
+        progress.permissionFlow = flow
+        audioCheckTimeout?.cancel(); audioCheckTimeout = nil
+        audioCheckRunning = false
+        checks.stopChimeTest()
+        // Success updates this guide in place. Only Done/Continue can bring the app back.
+    }
+
+    func finishPermissionAssistant() {
+        guard permissionFlow?.stage == .ready else { return }
+        let next = nextAssistantGrant
+        progress.permissionFlow = nil
+        stopGuide()
+        if let next { beginCurrentGrant(next) }
+        else { Shared.endPermissionGuide(returnToApp: true) }
+    }
+
+    func suspendPermissionAssistant(returnToApp: Bool = true) {
+        guard !working else { return }
+        progress.permissionFlow?.suspended = true
+        stopGuide()
+        Shared.endPermissionGuide(returnToApp: returnToApp)
+    }
+
+    func restartForPermission() {
+        guard needsPermissionRestart, !working else { return }
+        Shared.saveBar.noteLeaving()
+        // Ask Launch Services to reopen this same bundle after the process exits. The app
+        // path is a positional argument, never shell source; no permission request is replayed.
+        let reopen = Process()
+        reopen.executableURL = URL(fileURLWithPath: "/bin/sh")
+        reopen.arguments = ["-c", "while /bin/kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; exec /usr/bin/open \"$2\"", "whoprrr-reopen", String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundleURL.path]
+        do { try reopen.run(); NSApp.terminate(nil) }
+        catch { note = "Quit and reopen Whoprrr to finish applying this permission." }
     }
 
     func stopGuide() {
         guide.stop()
+        audioCheckTimeout?.cancel(); audioCheckTimeout = nil
+        audioCheckRunning = false
         checks.stopChimeTest()
     }
 
     func skip(_ grant: Permission) {
+        progress.permissionFlow = nil
         stopGuide()
         progress.skipped.insert(grant)
         if progress.askingAgain == grant { progress.askingAgain = nil }
@@ -334,30 +447,25 @@ final class SetupController: ObservableObject {
     }
 
     func retry(_ grant: Permission, reset: Bool) {
-        guard !working else { return }
-        if reset, !progress.reserveReset(grant) { return }
-        working = true
-        for feature in users(of: grant) { progress.findings[feature] = nil }
-        run = Task {
-            let resetOK = !reset ? true : await taste.reset(grant)
-            // Preserve the retry step before opening a pane that can relaunch the app.
-            progress.grantedByTest.remove(grant)
-            progress.skipped.remove(grant)
-            progress.askingAgain = grant
-            if grant == .inputMonitoring && reset { inputRestartRequested = true }
-            if progress.step != .complete { progress.step = .permissions }
-            working = false
-            refreshGrants()
-            guard !Task.isCancelled else { return }
-            startGrant(grant, requireToggle: !resetOK && states[grant] == .granted)
-            if !resetOK { note = "Whoprrr couldn’t clear this switch. Turn it off and on in System Settings." }
-        }
+        prepareParkedTargets(for: grant)
+        presentPermission(grant, repair: reset, track: true, replace: true)
     }
 
-    /// A grant asked for from Permissions or a feature page. Only guides; it never parks or pauses anything,
-    /// so backing out leaves every feature as it was.
+    /// Entry from a feature or Permissions page. It opens the same explanation first.
     func guideGrant(_ grant: Permission) {
-        startGrant(grant, track: false)
+        let parked = prepareParkedTargets(for: grant)
+        presentPermission(grant, repair: false, track: parked)
+    }
+
+    @discardableResult private func prepareParkedTargets(for grant: Permission) -> Bool {
+        guard progress.step == .complete else { return false }
+        let targets = Set(parkedFeatures.filter { progress.parked[$0]?.grants.contains(grant) == true })
+        guard !targets.isEmpty else { return false }
+        progress.renewal.formUnion(targets)
+        progress.renewalStarted = true
+        renewalVisible = true
+        tasteStarted = false
+        return true
     }
 
     func continueParked(_ features: Set<Feature>? = nil) {

@@ -7,7 +7,7 @@ import WhopperKit
 @MainActor
 final class AudioModel: ObservableObject {
     private let system: CoreAudioSystem
-    private let store = JSONStore<AudioSettings>(name: "audio")
+    private let store: JSONStore<AudioSettings>
     private let pinner: InputPinner
     private let keepAlive: KeepAliveEngine
     let eqEngine: OutputEQEngine
@@ -20,13 +20,15 @@ final class AudioModel: ObservableObject {
     private(set) var processedPeak: Float = 0
     private(set) var latestMicSignal: Float = 0
 
-    @Published var settings: AudioSettings { didSet { if settings != oldValue { settingsChanged() } } }
+    @Published var settings: AudioSettings { didSet { if settings != oldValue { settingsChanged(from: oldValue) } } }
     @Published private(set) var devices: [AudioDeviceInfo] = []
     @Published private(set) var defaultInputUID: String?
     @Published private(set) var pinStatus: InputPinner.Status?
     @Published private(set) var keepAliveStatus: [String: KeepAliveEngine.DeviceStatus] = [:]
     @Published private(set) var eqState: OutputEQEngine.State = .off
     @Published private(set) var eqLevel: Float = 0
+    @Published private(set) var mixApps: [MixApp] = []
+    @Published private(set) var mixFailures: Set<String> = []
     @Published private(set) var defaultOutputUID: String?
     @Published private(set) var micState: MicEngine.State = .off
     @Published private(set) var micLevels: (input: Float, output: Float) = (0, 0)
@@ -35,8 +37,9 @@ final class AudioModel: ObservableObject {
     /// Load state of every effect plugin on the mic and the system output, by slot id.
     @Published private(set) var pluginStatus: [UUID: PluginStatus] = [:]
 
-    init(system: CoreAudioSystem = .shared) {
+    init(system: CoreAudioSystem = .shared, store: JSONStore<AudioSettings> = JSONStore(name: "audio")) {
         self.system = system
+        self.store = store
         pinner = InputPinner(system: system)
         keepAlive = KeepAliveEngine(system: system)
         eqEngine = OutputEQEngine(system: system)
@@ -50,6 +53,10 @@ final class AudioModel: ObservableObject {
             }
         }
         eqEngine.onState = { [weak self] st in Task { @MainActor in self?.eqState = st } }
+        eqEngine.onMixApps = { [weak self] apps in Task { @MainActor in self?.updateMixApps(apps) } }
+        eqEngine.onMixFailures = { [weak self] ids in
+            Task { @MainActor in if let self, self.audioActive { self.mixFailures = ids } }
+        }
         eqEngine.onLevel = { [weak self] l in Task { @MainActor in self?.eqLevel = l } }
         eqEngine.onProcessedLevel = { [weak self] level in
             Task { @MainActor in
@@ -87,6 +94,7 @@ final class AudioModel: ObservableObject {
     func setActive(audio: Bool, mic: Bool) {
         guard audio != audioActive || mic != micActive else { return }
         audioActive = audio
+        if !audio { mixApps = []; mixFailures = [] }
         micActive = mic
         applySettings()
     }
@@ -102,6 +110,20 @@ final class AudioModel: ObservableObject {
         var named = settings
         for device in list { named.knownNames[device.uid] = device.name }
         if named != settings { settings = named }
+    }
+
+    /// Release an existing tap before clearing its macOS permission so the next test opens a fresh capture.
+    func stopForPermissionReset(_ permission: Permission) async {
+        guard permission == .systemAudio || permission == .microphone else { return }
+        let engine = permission == .systemAudio ? eqEngine : nil
+        let mic = permission == .microphone ? micEngine : nil
+        await withCheckedContinuation { continuation in
+            engineControl.async {
+                engine?.stop()
+                mic?.stop()
+                continuation.resume()
+            }
+        }
     }
 
     func beginEQTest() {
@@ -128,9 +150,17 @@ final class AudioModel: ObservableObject {
         applySettings()
     }
 
-    private func settingsChanged() {
+    private func settingsChanged(from oldValue: AudioSettings) {
         store.save(settings)
-        applySettings()
+        var previous = oldValue
+        previous.mix = settings.mix
+        if previous == settings {
+            if audioActive, !testingEQ, !settings.mix.matchesLevels(of: oldValue.mix) {
+                applyEQ(settings.eq, mix: settings.mix)
+            }
+        } else {
+            applySettings()
+        }
     }
 
     private func applySettings() {
@@ -142,7 +172,7 @@ final class AudioModel: ObservableObject {
             test.permissionVerified = false
             test.plugins = []
             applyEQ(test)
-        } else if audioActive { applyEQ(settings.eq) } else { stopEQ() }
+        } else if audioActive { applyEQ(settings.eq, mix: settings.mix) } else { stopEQ() }
         if testingMic {
             var test = settings.mic
             test.enabled = true
@@ -160,10 +190,10 @@ final class AudioModel: ObservableObject {
     private var micRunning = true
     private let engineControl = DispatchQueue(label: "gg.tico.whopper.audio.control", qos: .userInitiated)
 
-    private func applyEQ(_ s: OutputEQSettings) {
+    private func applyEQ(_ s: OutputEQSettings, mix: MixSettings = MixSettings()) {
         eqRunning = true
         let engine = eqEngine
-        engineControl.async { engine.apply(s) }
+        engineControl.async { engine.apply(s, mix: mix) }
     }
 
     private func stopEQ() {
@@ -218,6 +248,12 @@ final class AudioModel: ObservableObject {
     // MARK: Equalizer
 
     /// The output device whose EQ is being edited: the chosen target, else the current default output.
+    func reloadAfterBackup() {
+        var restored = store.load(default: AudioSettings())
+        restored.eq.permissionVerified = settings.eq.permissionVerified
+        settings = restored
+    }
+
     var eqDeviceUID: String? { settings.eq.targetUID ?? defaultOutputUID }
     var eqPerDevice: Bool { eqDeviceUID.map { settings.eq.profiles[$0] != nil } ?? false }
 
@@ -233,6 +269,35 @@ final class AudioModel: ObservableObject {
         guard let uid = eqDeviceUID else { return }
         if on { settings.eq.profiles[uid] = settings.eq.defaultProfile } else { settings.eq.profiles[uid] = nil }
     }
+
+    // MARK: Mixer
+
+    private func updateMixApps(_ apps: [MixApp]) {
+        guard audioActive else { return }
+        if mixApps != apps { mixApps = apps }
+        let mix = withLiveMixNames(settings.mix)
+        if mix != settings.mix { settings.mix = mix }
+    }
+
+    func withLiveMixNames(_ mix: MixSettings) -> MixSettings {
+        var result = mix
+        for app in mixApps {
+            if let saved = mix.apps[app.id], saved.name != app.name {
+                result.set(app.id, volume: saved.volume, muted: saved.muted, name: app.name)
+            }
+        }
+        return result
+    }
+
+    #if DEBUG
+    func showDebugMixer(apps: [MixApp], equalizerOn: Bool, failures: Set<String>) {
+        guard !audioActive else { return }
+        mixApps = apps
+        mixFailures = failures
+        settings.eq.enabled = equalizerOn
+        eqState = equalizerOn ? .running(device: "Xiaomi SO", muted: true) : .off
+    }
+    #endif
 
     // MARK: Intent helpers for the view
 

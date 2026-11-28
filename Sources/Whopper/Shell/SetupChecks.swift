@@ -20,7 +20,7 @@ struct OwnPermissionResetter: PermissionResetting {
         guard let service = permission.resetService, let bundle = Bundle.main.bundleIdentifier,
               Bundle.main.bundleURL.pathExtension == "app",
               ProcessInfo.processInfo.environment["WHOPPER_NO_START"] != "1",
-              ProcessInfo.processInfo.environment["WHOPPER_DATA_DIR"] == nil else { return false }
+              ProcessInfo.processInfo.environment["WHOPPER_DATA_DIR"] == nil || bundle.hasPrefix("gg.tico.whopper.qa.") else { return false }
         return await Task.detached {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
@@ -29,7 +29,7 @@ struct OwnPermissionResetter: PermissionResetting {
             process.standardError = FileHandle.nullDevice
             do { try process.run() } catch { return false }
             // Never wait forever: give up after 10 seconds and report that the reset didn't work.
-            for _ in 0..<200 where process.isRunning { Thread.sleep(forTimeInterval: 0.05) }
+            for _ in 0..<200 where process.isRunning { try? await Task.sleep(for: .milliseconds(50)) }
             if process.isRunning { process.terminate(); return false }
             return process.terminationStatus == 0
         }.value
@@ -40,9 +40,12 @@ struct OwnPermissionResetter: PermissionResetting {
 final class SetupChecks: TasteProbing {
     private var chime: Process?
     private var cuedChime: Task<Void, Never>?
+    private var verifiedAudio = false
+
+    func prepareAudioPermission() { verifiedAudio = false; Shared.audio.beginEQTest() }
 
     func startChimeTest() {
-        Shared.audio.beginEQTest()
+        prepareAudioPermission()
         cuedChime?.cancel()
         cuedChime = Task {
             try? await Task.sleep(for: .milliseconds(450))
@@ -71,7 +74,10 @@ final class SetupChecks: TasteProbing {
         Shared.audio.endEQTest()
     }
 
-    var heardChime: Bool { Shared.audio.processedPeak > 0.0003 }
+    func rememberAudioProof() { if Shared.audio.processedPeak > 0.0003 { verifiedAudio = true } }
+    // Keep this proof through Done/Continue so the subsequent Taste test doesn't depend
+    // on whether the person clicked before the live meter returned to silence.
+    var heardChime: Bool { verifiedAudio || Shared.audio.processedPeak > 0.0003 }
 
     func tryFeature(_ feature: Feature, mode: TasteMode) async -> TasteFinding {
         switch feature {

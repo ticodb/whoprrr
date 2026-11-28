@@ -4,17 +4,33 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 
 ## Unreleased
 
+## 0.9.0 beta 9: your setup, close at hand
+
+Released 2026-11-27.
+
 ### Added
-- **One menu for presets** in Audio, Microphone, Windows, Keys and mouse, and Clipboard. It shows which preset is in use and whether you edited it. Update with one click or ⌘U. When the active recipe uses those settings, the same action saves the recipe and offers one Undo for both. Manage presets to rename them, or to hide or restore built-ins.
-- **Picklsss milestones** celebrate your first take, first accepted setup, first keep, and the ranks and takes that follow. Every take and share adds a pickle. See your burger grow on “My shared setups”.
+- **Per-app mixer.** Turn down or mute apps playing sound, including browser helpers. Paused apps stay available, dormant audio clients stay out of the list, and recipes remember your adjustments.
+- **Typing language per recipe.** Choose an enabled keyboard input source, enable an installed source, or leave the language alone. A manual language switch takes precedence until you reapply a recipe.
+- **Full backups.** Back up all recipes, presets and per-device settings. Restore previews what gets replaced and keeps a recovery copy first. Newer-format backups are refused without modifying them.
+- **Picklsss milestones** celebrate your first take, first accepted setup, first keep, and the ranks and takes that follow.
 
 ### Changed
-- **Quieter recipe saves**: the page title shows “Cookin’” and the recipe name while you make changes. Open it to save, make a new recipe, or put things back. Press ⌘S anywhere in the main window to save. A reminder appears when you leave a page, and “Not yet” keeps it away until the next change. The saved message offers Undo for four seconds and stays while you hover over it. The recipe menu still keeps the previous saved version.
-- The menu-bar drawer shows what the last update check found and has one Settings button.
+- **One permission assistant** handles setup and repairs. It explains the action first, opens one system step at a time, keeps Finder behind manual-add help, and resumes after a restart. Success stays in the guide until you choose Done or Continue.
+- **A pinned save bar** names the sections you’ve edited and offers preset and recipe saves, Put back, and Undo. Press ⌘S to update the active recipe.
+- **One preset menu per section** combines built-ins and your presets, marks edits, and offers Update, Save as new, and Manage presets. Press ⌘U to update a personal preset.
+- **Full controls inside the menu-bar drawer.** Open a section and return to the overview without switching Spaces. The main window opens on the current Space and closes the drawer when requested.
+- Audio effects use a persistent searchable picker. The recipe Switch button appears only when two or more recipes are available.
+- The menu-bar update line shows what the latest check found.
 
 ### Fixed
-- System Audio Recording shows the macOS permission state when it can be read.
-- Whoprrr loads older preset libraries and keeps unreadable libraries in place with a timestamped copy.
+- Fader moves, mute, and reset reuse the audio route and smoothly change gain instead of rebuilding it.
+- Older preset libraries migrate to the catalog format. Unreadable libraries stay untouched with a timestamped copy, and cannot be overwritten by a subsequent save.
+- Snap previews update only when their position changes and skip Whoprrr’s own windows.
+- System Audio Recording shows the macOS permission state when it can be read. Shared Picklsss uploads remain compatible with the current sharing format.
+
+### Beta notes
+- Public beta builds remain ad-hoc signed. macOS can require permissions to be renewed after an update.
+- The new native permission handoff and restart path still need a hands-on check after updating. An intermittent drag flicker could not be reproduced; snap-preview safeguards are included.
 
 ## 0.9.0 beta 8: make it a combo from the app
 

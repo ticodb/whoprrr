@@ -19,6 +19,8 @@ final class WindowModel: ObservableObject {
         updateConflicts()
     }
 
+    func reloadAfterBackup() { settings = store.load(default: WindowSettings()) }
+
     func setActive(_ on: Bool) {
         guard on != active else { return }
         active = on

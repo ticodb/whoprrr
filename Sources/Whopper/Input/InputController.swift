@@ -47,6 +47,12 @@ final class InputController: ObservableObject {
         engine.onPanicChange = { [weak self] p in DispatchQueue.main.async { self?.status = p ? .paused : .running } }
     }
 
+    func reloadAfterBackup() {
+        var restored = store.load(default: InputSettings())
+        restored.applyDefaults()
+        settings = restored
+    }
+
     var isPaused: Bool { status == .paused }
     func setPaused(_ on: Bool) { poster.post(engine.setPaused(on)) }
 

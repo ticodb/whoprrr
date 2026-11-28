@@ -232,6 +232,12 @@ final class AppModel: ObservableObject {
         do { presets = try store.load(); presetError = nil } catch { presetError = "Presets file: \(error)"; presets = [] }
     }
 
+    func reloadAfterBackup() {
+        loadPresets()
+        learned = (target?.identity ?? selected?.identity).map { learnedStore.settings(for: $0) } ?? []
+        lastPresetName = nil
+    }
+
     func presetsForSelected() -> [Preset] {
         guard let id = target?.identity ?? selected?.identity else { return [] }
         return presets.filter { $0.identity.matches(id) }

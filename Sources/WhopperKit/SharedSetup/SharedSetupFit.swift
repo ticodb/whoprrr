@@ -22,10 +22,16 @@ public struct ReceiverEnvironment: Sendable {
     public var permissions: [Permission: PermissionStatus]
     /// The Mac's own settings per recipe key ("audio", "windows"…), as `RecipeStore.snapshot` returns them.
     public var sections: [String: Data]
+    public var installedInputSources: Set<String>
+    public var enabledInputSources: Set<String>
+    public var currentInputSource: String?
 
     public init(gear: [DeviceSignature] = [], plugins: [InstalledPlugin] = [], macOS: String = "14.0",
-                permissions: [Permission: PermissionStatus] = [:], sections: [String: Data] = [:]) {
+                permissions: [Permission: PermissionStatus] = [:], sections: [String: Data] = [:],
+                installedInputSources: Set<String> = [], enabledInputSources: Set<String> = [], currentInputSource: String? = nil) {
         self.gear = gear; self.plugins = plugins; self.macOS = macOS; self.permissions = permissions; self.sections = sections
+        self.installedInputSources = installedInputSources; self.enabledInputSources = enabledInputSources
+        self.currentInputSource = currentInputSource
     }
 }
 
@@ -83,6 +89,7 @@ public enum LineKind: Equatable, Sendable {
     case keysLogitech
     case keysMappings
     case clipboard
+    case typingLanguage
     case display
 }
 
@@ -170,6 +177,10 @@ public enum SharedSetupFit {
         for m in plan.matches { if let r = m.receiver, !devices.contains(where: { $0.id == r.id }) { devices.append(r) } }
 
         var r = Recipe(name: setup.title, devices: devices, sections: data, autoApply: false)
+        if let language = setup.typingLanguage, plan.line("typingLanguage")?.state.isOff == false {
+            r.inputSourceID = language.id
+            r.inputSourceName = language.name
+        }
         r.createdAt = now; r.updatedAt = now
         r.skippedLines = plan.off.map { SkippedLine(id: $0.id, part: $0.part, title: $0.title, reason: $0.state.reason ?? "") }
         r.authorsOriginal = AuthorsOriginal(title: setup.title, madeBy: madeBy, setup: setup.encoded(), fittedSections: data, takenAt: now)
@@ -192,6 +203,10 @@ public enum SharedSetupFit {
         var display: DisplayPresetRequest?
         Merger.apply(line, setup, plan.matches, env, into: &sections, display: &display)
         var out = recipe
+        if line.kind == .typingLanguage {
+            out.inputSourceID = setup.typingLanguage?.id
+            out.inputSourceName = setup.typingLanguage?.name
+        }
         for (k, v) in sections where recipe.sections[k] != nil || k == Merger.sectionKey(line.part) { out.sections[k] = v.encoded() }
         if let display { out.sections["display"] = JSONValue.object(["preset": .string(display.name)]).encoded() }
         out.skippedLines = recipe.skipped.filter { $0.id != lineID }
@@ -408,6 +423,13 @@ private struct Planner {
             }
             add("display", "display", .display, "Monitor brightness, contrast, color and sharpness", st, cause: cause)
         }
+        if let language = setup.typingLanguage {
+            let state: LineState
+            if env.enabledInputSources.contains(language.id) { state = .appliesWithNote(language.name) }
+            else if env.installedInputSources.contains(language.id) { state = .off("\(language.name) is turned off on this Mac.") }
+            else { state = .off("\(language.name) is not on this Mac") }
+            add("typingLanguage", "typingLanguage", .typingLanguage, "Typing language", state)
+        }
         return out
     }
 }
@@ -513,6 +535,7 @@ private enum Merger {
         case .microphonePlugins: return (setup.settings["microphone"]?["plugins"]?.array ?? []).contains { slot($0, env) != nil }
         case .display: return receiverKey(matches, setup.settings["display"]?["monitor"]?.integer ?? -1) != nil
         case .keysLogitech: return env.gear.contains { $0.kind == .logitech }
+        case .typingLanguage: return setup.typingLanguage.map { env.enabledInputSources.contains($0.id) } ?? false
         case .equalizerCurve:
             let sp = setup.gear.indices.filter { setup.gear[$0].role == "speaker" }
             return sp.isEmpty || sp.contains { receiverKey(matches, $0) != nil }
@@ -523,6 +546,7 @@ private enum Merger {
     static func apply(_ l: SetupLine, _ setup: SharedSetup, _ matches: [GearMatch], _ env: ReceiverEnvironment, into s: inout [String: J], display: inout DisplayPresetRequest?) {
         let doc = setup.settings
         switch l.kind {
+        case .typingLanguage: break  // stored on the recipe rather than in a settings section
         case .equalizerCurve:
             guard let a = doc["audio"], var au = s["audio"] else { return }
             au = au.setting(["eq", "defaultProfile"], curve(a["equalizer"]?["curve"]))

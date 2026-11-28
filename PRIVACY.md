@@ -16,6 +16,7 @@
   - **Looking for a purchase.** When you open the Picklsss page or the Extras page and the pass does not have the extra, Whoprrr sends the pass to `/api/pass/renew` in the background, at most once every 10 minutes, to learn whether you bought it somewhere else. The time of the last try is kept in memory only.
   - **Paying** happens in your browser on whoprrr.app. Whoprrr never handles a card; it re-checks its pass when you come back.
   - On your Mac, `picklsss.json` remembers what you took (with the settings from just before, so "Put back" can restore them), your answer to the question above, what you shared and the notices it has not shown yet.
+- The mixer reads which apps are making sound on this Mac and sends nothing.
 - Audio is processed live in memory. It is never recorded or written to disk, and never leaves your Mac.
 - The camera is used only while you run camera-assisted display matching; frames are analysed in memory and not saved.
 
@@ -26,7 +27,7 @@ All in `~/Library/Application Support/Whopper/` (the folder keeps the project's 
 | File | Contents |
 |---|---|
 | `input.json` | Your key and mouse rules and key replacements |
-| `audio.json` | Equalizer, effects, plugin chains and their saved plugin settings, mic and routing settings, device names last seen |
+| `audio.json` | Equalizer, app volumes and mutes, effects, plugin chains and their saved plugin settings, mic and routing settings, device names last seen |
 | `windows.json`, `clipboard.json` | Settings for those modules |
 | `license.json` | This Mac's pass and when it was last refreshed. No key |
 | `recipes.json`, `presets.json` | Your recipes (including the settings and device names they cover) and saved presets |

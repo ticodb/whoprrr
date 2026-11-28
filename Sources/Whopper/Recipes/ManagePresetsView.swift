@@ -30,10 +30,11 @@ struct ManagePresetsView: View {
         let groups = surface.groups(in: library)
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Presets").font(Brand.display(20, .semibold)).accessibilityAddTraits(.isHeader)
+                Text("Manage presets").font(Brand.display(20, .semibold)).accessibilityAddTraits(.isHeader)
                 Spacer()
                 Button("Done") { dismiss() }.buttonStyle(.brandPlain).keyboardShortcut(.cancelAction)
             }
+            Text(surface.title).font(Brand.subheadline).foregroundStyle(.secondary)
             #if DEBUG
             if renderAllRows { rows(groups, previewActionsFor: preview) } else { scrollingRows(groups) }
             #else
@@ -74,20 +75,19 @@ struct ManagePresetsView: View {
     private func rows(_ groups: PresetGroups, previewActionsFor preview: PresetID? = nil) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             group("Yours", entries: groups.yours, groups: groups, preview: preview)
-            group("Built in", entries: groups.builtIn, groups: groups, preview: preview)
-            if !groups.hidden.isEmpty { group("Hidden", entries: groups.hidden, groups: groups, hidden: true, preview: preview) }
+            group("Built-in", entries: groups.builtIn + groups.hidden, groups: groups, preview: preview)
         }
     }
 
     @ViewBuilder private func group(_ title: String, entries: [PresetEntry], groups: PresetGroups,
-                                    hidden: Bool = false, preview: PresetID?) -> some View {
+                                    preview: PresetID?) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(Brand.caption.weight(.semibold)).foregroundStyle(.secondary).accessibilityAddTraits(.isHeader)
             if entries.isEmpty {
                 Text("No presets").font(Brand.caption).foregroundStyle(.secondary).padding(.vertical, 5)
             }
             ForEach(entries) { entry in
-                row(entry, inUse: groups.inUse?.id == entry.id, edited: groups.edited, hidden: hidden)
+                row(entry, inUse: groups.inUse?.id == entry.id, edited: groups.edited, hidden: groups.hidden.contains(entry))
                 if preview == entry.id {
                     HStack {
                         Spacer()
@@ -104,7 +104,7 @@ struct ManagePresetsView: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.name).font(Brand.subheadline.weight(.semibold)).lineLimit(2)
-                    .onTapGesture(count: 2) { if !hidden { beginRename(entry) } }
+                    .onTapGesture(count: 2) { if !entry.isFactory { beginRename(entry) } }
                 if inUse {
                     Text("In use on \(surface.locationName)" + (edited ? " · edited" : ""))
                         .font(Brand.caption2).foregroundStyle(.secondary)
@@ -113,10 +113,10 @@ struct ManagePresetsView: View {
             }
             Spacer(minLength: 8)
             if hidden, case .factory(let id) = entry.id {
-                Button("Show") { setHidden(false, id: id) }.buttonStyle(.brandPlain)
-                    .accessibilityLabel("Show \(entry.name)")
+                Button("Restore") { setHidden(false, id: id) }.buttonStyle(.brandPlain)
+                    .accessibilityLabel("Restore \(entry.name)")
             } else {
-                if inUse && edited {
+                if !entry.isFactory && inUse && edited {
                     Button("Update") { update(entry) }.buttonStyle(.brand)
                         .accessibilityLabel("Update \(entry.name)")
                 }
@@ -133,8 +133,8 @@ struct ManagePresetsView: View {
 
     private func menu(_ entry: PresetEntry) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            PresetMenuItem("Rename…") { more = nil; beginRename(entry) }
             if !entry.isFactory {
+                PresetMenuItem("Rename…") { more = nil; beginRename(entry) }
                 PresetMenuItem("Duplicate") {
                     more = nil
                     let groups = surface.groups(in: library)
@@ -143,7 +143,6 @@ struct ManagePresetsView: View {
                     if !library.duplicate(entry, name: name, for: surface.key) { actions.couldNotSave() }
                 }
             }
-            PresetMenuItem("Update with current settings") { more = nil; update(entry) }
             if case .factory(let id) = entry.id {
                 if entry.changed { PresetMenuItem("Restore original") { more = nil; restoreOriginal(id) } }
                 Divider()

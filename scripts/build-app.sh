@@ -10,7 +10,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 LOCAL_IDENTITY="Whopper Local Signing"
 VERSION="$(cat VERSION)"
-LABEL="${RELEASE_LABEL-beta 8}"
+LABEL="${RELEASE_LABEL-beta 9}"
 BUILD="${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
 SIGN="${SIGN_IDENTITY-}"
 # Sparkle (automatic updates). The public EdDSA key is safe to commit; the private key lives only in the
@@ -68,12 +68,22 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleTypeRole</key><string>Viewer</string>
     <key>LSHandlerRank</key><string>Owner</string>
     <key>LSItemContentTypes</key><array><string>gg.tico.whoprrr.setup</string></array>
+  </dict><dict>
+    <key>CFBundleTypeName</key><string>Whoprrr backup</string>
+    <key>CFBundleTypeRole</key><string>Viewer</string>
+    <key>LSHandlerRank</key><string>Owner</string>
+    <key>LSItemContentTypes</key><array><string>gg.tico.whoprrr.backup</string></array>
   </dict></array>
   <key>UTExportedTypeDeclarations</key><array><dict>
     <key>UTTypeIdentifier</key><string>gg.tico.whoprrr.setup</string>
     <key>UTTypeDescription</key><string>Whoprrr shared setup</string>
     <key>UTTypeConformsTo</key><array><string>public.json</string></array>
     <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>whoprrr-setup</string></array></dict>
+  </dict><dict>
+    <key>UTTypeIdentifier</key><string>gg.tico.whoprrr.backup</string>
+    <key>UTTypeDescription</key><string>Whoprrr backup</string>
+    <key>UTTypeConformsTo</key><array><string>public.json</string></array>
+    <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>whoprrr-backup</string></array></dict>
   </dict></array>
   <key>SUFeedURL</key><string>${SPARKLE_FEED_URL}</string>
   <key>SUPublicEDKey</key><string>${SPARKLE_PUBLIC_KEY}</string>

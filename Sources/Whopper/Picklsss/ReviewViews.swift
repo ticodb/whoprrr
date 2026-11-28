@@ -136,7 +136,20 @@ struct StaysOffSection: View {
                 BrandCard {
                     ForEach(Array(g.stays.enumerated()), id: \.element.id) { i, grp in
                         if i > 0 { Divider() }
-                        group(grp)
+                        if grp.lines.count == 1, grp.lines.first?.part == "typingLanguage" {
+                            HStack(spacing: 10) {
+                                Toggle("Typing language", isOn: .constant(false))
+                                    .toggleStyle(.switch).controlSize(.small).labelsHidden().disabled(true)
+                                    .accessibilityLabel("Typing language")
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Typing language").font(Brand.subheadline.weight(.semibold))
+                                    Text(grp.title).font(Brand.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                        } else {
+                            group(grp)
+                        }
                     }
                 }
             }

@@ -25,6 +25,8 @@ final class ClipboardController: ObservableObject {
         return true
     }
 
+    func reloadAfterBackup() { settings = settingsStore.load(default: ClipboardSettings()) }
+
     func setActive(_ on: Bool) {
         guard on != active else { return }
         active = on

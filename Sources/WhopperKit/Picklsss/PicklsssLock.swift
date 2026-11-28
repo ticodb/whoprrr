@@ -50,6 +50,7 @@ public enum PicklsssWords {
         case "microphone": "Microphone"
         case "windows": "Windows"
         case "keys": "Keys and mouse"
+        case "typingLanguage": "Typing language"
         case "clipboard": "Clipboard"
         case "display": "External displays"
         default: key.prefix(1).uppercased() + key.dropFirst()

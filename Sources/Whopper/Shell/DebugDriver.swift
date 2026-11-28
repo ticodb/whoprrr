@@ -1,6 +1,7 @@
 #if DEBUG
 import SwiftUI
 import AppKit
+import AudioCore
 import WhopperKit
 
 /// Debug builds only: runs a JSON list of steps against the same controllers the buttons call, and takes screenshots of the main
@@ -58,10 +59,28 @@ enum DebugDriver {
         case "recipe-save-change":
             Shared.windows.settings.gap = s["gap"] as? Double ?? 18
             Shared.saveBar.settingsDidChange()
-        case "recipe-save-not-yet": Shared.saveBar.dismissReminder()
         case "recipe-save-now": Shared.saveBar.save()
         case "recipe-save-state":
-            emit("recipe save: \(Shared.saveBar.phase), reminder=\(Shared.saveBar.reminderRecipe ?? "-")")
+            emit("recipe save: \(Shared.saveBar.changedTitles.joined(separator: ", "))")
+        case "mixer-preview":
+            guard env["WHOPPER_NO_START"] == "1" else { return }
+            let rows = s["apps"] as? [[String: Any]] ?? []
+            var mix = MixSettings()
+            var failures = Set<String>()
+            let apps = rows.compactMap { row -> MixApp? in
+                guard let id = row["id"] as? String, let name = row["name"] as? String else { return nil }
+                mix.set(id, volume: row["volume"] as? Double ?? 1, muted: row["muted"] as? Bool ?? false, name: name)
+                if row["failed"] as? Bool == true { failures.insert(id) }
+                guard row["status"] as? String != "offline" else { return nil }
+                return MixApp(id: id, name: name, isPlaying: row["status"] as? String != "running")
+            }
+            Shared.nav.page = .feature(.audio)
+            Shared.audio.showDebugMixer(apps: apps, equalizerOn: s["equalizer"] as? Bool ?? true, failures: failures)
+            Shared.audio.settings.mix = mix
+            if let recipe = s["recipe"] as? String {
+                _ = Shared.recipes.create(name: recipe, symbol: "house", includes: ["audio"], devices: [], autoApply: false)
+            }
+            Shared.saveBar.settingsDidChange()
         case "preset-seed":
             Shared.nav.page = .feature(.audio)
             let uid = "debug-xm4"
@@ -226,18 +245,27 @@ enum DebugDriver {
             let r = ImageRenderer(content: framed)
             r.scale = 1.5
             guard let cg = r.cgImage else { emit("shot \(file) FAILED"); return }
-            try? NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "\(dir)/\(file).png"))
-            emit("shot \(file) \(cg.width)x\(cg.height)")
+            var screenshot = cg
+            // App icons can make SwiftUI render in extended color. Encode the screenshot in ordinary sRGB.
+            if cg.bitsPerComponent > 8, let space = CGColorSpace(name: CGColorSpace.sRGB),
+               let context = CGContext(data: nil, width: cg.width, height: cg.height, bitsPerComponent: 8,
+                                       bytesPerRow: 0, space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
+                context.draw(cg, in: CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
+                screenshot = context.makeImage() ?? cg
+            }
+            try? NSBitmapImageRep(cgImage: screenshot).representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "\(dir)/\(file).png"))
+            emit("shot \(file) \(screenshot.width)x\(screenshot.height)")
         }
         if name.hasPrefix("window-") {
             write(Shared.wrap(MainWindowView()).preferredColorScheme(env["WHOPPER_APPEARANCE"] == "light" ? .light : .dark), name, w, h)
             return
         }
         // The page as the window lays it out (a ScrollView draws nothing in an image, so the page is drawn without one): the same
-        // 680-wide column with 28 points around it, the reminder and notices above it, the save bar below.
+        // 680-wide column with 28 points around it, the save bar pinned above it, followed by any notices.
         let page = VStack(alignment: .leading, spacing: 16) {
-            StoveReminder(); NoticesBar(); PageContent(page: Shared.nav.page).environment(\.showsRecipeSaveMark, true)
             SaveBarArea()
+            NoticesBar()
+            PageContent(page: Shared.nav.page)
         }.padding(28).frame(width: 680 + 56, alignment: .topLeading)
             .overlay(alignment: .top) {
                 if let milestone = c.milestone {

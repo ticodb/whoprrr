@@ -198,11 +198,17 @@ public struct ShelfClient: Sendable {
     // MARK: Plumbing
 
     private func fields(_ r: ShareRequest) -> [String: Any] {
-        [
+        var document = r.document
+        // The shelf's v1 validator rejects this private-file extension as tampered.
+        if r.formatVersion == 1, var fields = document.object {
+            fields.removeValue(forKey: "typingLanguage")
+            document = .object(fields)
+        }
+        return [
             "title": r.title, "line": r.line, "parts": r.parts,
             "gear": r.gear.map { ["role": $0.role, "model": $0.model] },
             "requirements": ["plugins": r.requirements.plugins, "minMacOS": r.requirements.minMacOS as Any? ?? NSNull(), "permissions": r.requirements.permissions],
-            "document": r.document.foundation, "formatVersion": r.formatVersion,
+            "document": document.foundation, "formatVersion": r.formatVersion,
         ]
     }
 

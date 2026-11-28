@@ -136,6 +136,8 @@ public struct Recipe: Codable, Identifiable, Equatable, Sendable {
     public var sections: [String: Data] = [:]
     /// Apply by itself when exactly this gear shows up.
     public var autoApply = false
+    public var inputSourceID: String?
+    public var inputSourceName: String?
     /// The version before the last save (or the one a "go back" put aside). One only, swapped with the current one.
     public var previous: RecipeVersion?
     /// Only for recipes taken from a shared setup: the author's version, as first fitted. A second slot, apart from `previous`.
@@ -169,6 +171,8 @@ public protocol RecipeSurface: AnyObject {
     var recipeTitle: String { get }
     /// Settings as JSON (sorted keys, so equal settings give equal bytes), or nil when there is nothing to capture.
     func captureRecipeData() -> Data?
+    /// The settings currently held by the app, without asking external engines to refresh them.
+    func captureLiveRecipeData() -> Data?
     /// Replaces this surface's settings. False if the data could not be read.
     @discardableResult func applyRecipeData(_ data: Data) -> Bool
     /// The same settings in the one form this surface writes today, for comparing. A recipe saved by an earlier version, or in
@@ -176,6 +180,7 @@ public protocol RecipeSurface: AnyObject {
     func canonicalRecipeData(_ data: Data) -> Data
 }
 public extension RecipeSurface {
+    func captureLiveRecipeData() -> Data? { captureRecipeData() }
     func canonicalRecipeData(_ data: Data) -> Data { data }
 }
 
@@ -243,11 +248,19 @@ public final class RecipeStore: ObservableObject {
     private var applied: [String: Data]
     private var changedAt: Date?
     /// How the file was found at launch.
-    public let loadOutcome: RecipeLoadOutcome
-    private let canWrite: Bool
+    @Published public private(set) var loadOutcome: RecipeLoadOutcome
+    private var canWrite: Bool {
+        switch loadOutcome {
+        case .migrationBlocked, .newerFormat, .unreadable: false
+        default: true
+        }
+    }
     private var capturing = 0
     /// Called after anything that changes which recipe is active or what it holds, so a controller can re-check.
     public var onChange: (() -> Void)?
+    public var onApplyRecipe: ((Recipe, Bool, Bool) -> Void)?
+    public var additionalDraftSections: (() -> [String: String])?
+    public var activeBaseline: [String: Data] { applied }
 
     public init(url: URL? = nil, now: @escaping () -> Date = { Date() }) {
         self.now = now
@@ -255,10 +268,14 @@ public final class RecipeStore: ObservableObject {
         let (f, outcome) = fileStore.load()
         recipes = f.recipes; activeID = f.activeID; applied = f.appliedSections; changedAt = f.changedAt; stove = f.stove
         loadOutcome = outcome
-        switch outcome {
-        case .migrationBlocked, .newerFormat, .unreadable: canWrite = false
-        default: canWrite = true
-        }
+    }
+
+    public func reloadAfterBackup() {
+        let (file, outcome) = fileStore.load()
+        recipes = file.recipes; activeID = file.activeID; applied = file.appliedSections
+        changedAt = file.changedAt; stove = file.stove; loadOutcome = outcome
+        pendingSwitch = nil
+        notice = nil
     }
 
     public func register(_ s: RecipeSurface) { surfaces[s.recipeKey] = s }
@@ -281,10 +298,13 @@ public final class RecipeStore: ObservableObject {
     public var isCapturing: Bool { capturing > 0 }
 
     /// Snapshot of the current settings for the given surfaces.
-    public func snapshot(_ keys: Set<String>) -> [String: Data] {
+    public func snapshot(_ keys: Set<String>, sync: Bool = true) -> [String: Data] {
         capturing += 1; defer { capturing -= 1 }
         var out: [String: Data] = [:]
-        for k in keys { if let d = surfaces[k]?.captureRecipeData() { out[k] = d } }
+        for key in keys {
+            guard let surface = surfaces[key] else { continue }
+            out[key] = sync ? surface.captureRecipeData() : surface.captureLiveRecipeData()
+        }
         return out
     }
 
@@ -329,11 +349,13 @@ public final class RecipeStore: ObservableObject {
     @discardableResult
     public func apply(_ id: UUID, automatic: Bool = false) -> [String] {
         guard let r = recipes.first(where: { $0.id == id }) else { return [] }
+        let hadActiveRecipe = activeID != nil
         let failed = applySections(r)
         activeID = id
         applied = snapshot(Set(r.sections.keys))      // what the surfaces hold after applying (they may normalise)
         clearUnsaved()
         notice = failed.isEmpty ? (automatic ? "Switched to “\(r.name)” because its gear is connected" : "Applied “\(r.name)”") : "Applied “\(r.name)”, except \(failed.joined(separator: ", "))"
+        onApplyRecipe?(r, automatic, hadActiveRecipe)
         save()
         onChange?()
         return failed
@@ -430,14 +452,19 @@ public final class RecipeStore: ObservableObject {
     /// Saves the live settings into the recipe's own sections, keeping the content they replace as its previous version.
     /// Returns whether anything changed; saving settings that match what the recipe holds keeps the earlier version as it was.
     @discardableResult
-    public func save(_ id: UUID, devices: [DeviceSignature]? = nil) -> Bool {
-        guard let i = recipes.firstIndex(where: { $0.id == id }) else { return false }
-        let updated = capturedVersion(of: recipes[i])
+    public func save(_ id: UUID, devices: [DeviceSignature]? = nil, including extra: Set<String> = []) -> Bool {
+        guard canWrite, let i = recipes.firstIndex(where: { $0.id == id }) else { return false }
+        var updated = capturedVersion(of: recipes[i], including: extra)
         let changed = updated.sections != recipes[i].sections
-        if changed { recipes[i] = updated }
-        if let devices { recipes[i].devices = devices }
-        if activeID == id { applied = recipes[i].sections; clearUnsaved() }
-        save()
+        if let devices { updated.devices = devices }
+        var next = recipes
+        next[i] = updated
+        let active = activeID == id
+        let baseline = active ? updated.sections : applied
+        guard fileStore.save(RecipeFile(recipes: next, activeID: activeID, appliedSections: baseline,
+                                        changedAt: active ? nil : changedAt, stove: active ? nil : stove)) else { return false }
+        recipes = next
+        if active { applied = baseline; clearUnsaved() }
         onChange?()
         return changed
     }
@@ -453,16 +480,35 @@ public final class RecipeStore: ObservableObject {
     /// "Save as new": the live settings of the recipe's parts become a recipe of their own, which becomes the active one.
     /// The original keeps what it held. The new recipe has the same icon and gear, and does not switch automatically.
     @discardableResult
-    public func saveAsNew(from id: UUID, name: String) -> Recipe? {
-        guard let i = recipes.firstIndex(where: { $0.id == id }) else { return nil }
-        let src = recipes[i]
-        var r = Recipe(name: name, symbol: src.symbol, devices: src.devices, sections: snapshot(Set(src.sections.keys)), autoApply: false)
+    public func saveAsNew(from id: UUID?, name: String, including extra: Set<String> = [],
+                          devices: [DeviceSignature] = []) -> Recipe? {
+        guard canWrite else { return nil }
+        let i = recipes.firstIndex { $0.id == id }
+        guard id == nil || i != nil else { return nil }
+        let src = i.map { recipes[$0] }
+        let keys = Set(src?.sections.keys.map { $0 } ?? []).union(extra)
+        var r = Recipe(name: name, symbol: src?.symbol ?? "fork.knife", devices: src?.devices ?? devices,
+                       sections: snapshot(keys), autoApply: false)
+        r.inputSourceID = src?.inputSourceID
+        r.inputSourceName = src?.inputSourceName
         r.createdAt = now(); r.updatedAt = r.createdAt
-        recipes.insert(r, at: i + 1)
+        var next = recipes
+        next.insert(r, at: i.map { $0 + 1 } ?? next.endIndex)
+        guard fileStore.save(RecipeFile(recipes: next, activeID: r.id, appliedSections: r.sections)) else { return nil }
+        recipes = next
         activeID = r.id; applied = r.sections; clearUnsaved()
-        save()
         onChange?()
         return r
+    }
+
+    func undoCreatedRecipe(_ recipe: Recipe, priorID: UUID?, baseline: [String: Data]) -> Bool {
+        guard canWrite, activeID == recipe.id, self.recipe(recipe.id) == recipe,
+              priorID == nil || priorID.flatMap(self.recipe) != nil else { return false }
+        let next = recipes.filter { $0.id != recipe.id }
+        guard fileStore.save(RecipeFile(recipes: next, activeID: priorID, appliedSections: baseline)) else { return false }
+        recipes = next; activeID = priorID; applied = baseline; clearUnsaved()
+        onChange?()
+        return true
     }
 
     /// Discards unsaved changes: applies again what the recipe holds. Returns the surfaces that could not be applied.
@@ -494,9 +540,22 @@ public final class RecipeStore: ObservableObject {
         return failed
     }
 
-    func presetSave(for before: Recipe) -> PresetRecipeEdit? {
-        let after = capturedVersion(of: before)
+    func presetSave(for before: Recipe, part: String? = nil,
+                    merge: ((Data, Data) -> Data?)? = nil) -> PresetRecipeEdit? {
+        let after: Recipe
+        if let part, let merge, let stored = before.sections[part], let fresh = snapshot([part])[part],
+           let merged = merge(fresh, stored) {
+            var sections = before.sections
+            sections[part] = merged
+            after = capturedVersion(of: before, sections: sections)
+        } else if merge == nil {
+            after = capturedVersion(of: before)
+        } else { return nil }
         return after.sections == before.sections ? nil : PresetRecipeEdit(before: before, after: after)
+    }
+
+    func undoRecipeSave(_ before: Recipe, after: Recipe, baseline: [String: Data]) -> Bool {
+        commitPresetEdit(PresetRecipeEdit(before: after, after: before), apply: false, baseline: baseline)
     }
 
     func presetUndo(_ edit: PresetRecipeEdit) -> PresetRecipeEdit? {
@@ -510,18 +569,18 @@ public final class RecipeStore: ObservableObject {
     }
 
     /// Writes before publishing so a failed recipe write can roll the preset back without applying anything.
-    func commitPresetEdit(_ edit: PresetRecipeEdit, apply: Bool) -> Bool {
+    func commitPresetEdit(_ edit: PresetRecipeEdit, apply: Bool, baseline: [String: Data]? = nil) -> Bool {
         guard canWrite, hasPresetVersion(edit.before), let index = recipes.firstIndex(where: { $0.id == edit.before.id }) else { return false }
         let active = activeID == edit.before.id
         var next = recipes
         next[index] = edit.after
-        let file = RecipeFile(recipes: next, activeID: activeID, appliedSections: active ? edit.after.sections : applied,
+        let file = RecipeFile(recipes: next, activeID: activeID, appliedSections: active ? (baseline ?? edit.after.sections) : applied,
                               changedAt: active ? nil : changedAt, stove: active ? nil : stove)
         guard fileStore.save(file) else { return false }
         recipes = next
         if active {
             if apply { _ = applySections(edit.after) }
-            applied = apply ? snapshot(Set(edit.after.sections.keys)) : edit.after.sections
+            applied = apply ? snapshot(Set(edit.after.sections.keys)) : file.appliedSections
             clearUnsaved()
             if applied != file.appliedSections { save() }
         }
@@ -529,8 +588,11 @@ public final class RecipeStore: ObservableObject {
         return true
     }
 
-    private func capturedVersion(of recipe: Recipe) -> Recipe {
-        let fresh = snapshot(Set(recipe.sections.keys))
+    private func capturedVersion(of recipe: Recipe, including extra: Set<String> = []) -> Recipe {
+        capturedVersion(of: recipe, sections: snapshot(Set(recipe.sections.keys).union(extra)))
+    }
+
+    private func capturedVersion(of recipe: Recipe, sections fresh: [String: Data]) -> Recipe {
         guard fresh != recipe.sections else { return recipe }
         let t = now()
         var updated = recipe
@@ -592,6 +654,12 @@ public final class RecipeStore: ObservableObject {
         guard let i = recipes.firstIndex(where: { $0.id == id }) else { return }
         recipes[i].devices = devices; save()
     }
+    public func setInputSource(_ id: UUID, sourceID: String?, name: String? = nil) {
+        guard canWrite, let i = recipes.firstIndex(where: { $0.id == id }) else { return }
+        recipes[i].inputSourceID = sourceID
+        recipes[i].inputSourceName = sourceID == nil ? nil : name
+        save()
+    }
     public func delete(_ id: UUID) {
         recipes.removeAll { $0.id == id }
         if activeID == id { activeID = nil; applied = [:]; clearUnsaved() }
@@ -621,7 +689,8 @@ public final class RecipeStore: ObservableObject {
     public func autoSwitchDecision(connected: [DeviceSignature]) -> AutoSwitchDecision {
         guard let candidate = autoApplyCandidate(connected: connected) else { return .none }
         guard let current = active else { return .switchNow(candidate.id) }
-        let parts = changedPartTitles()
+        let extra = draftSectionsOverwritten(by: candidate, leaving: current)
+        let parts = changedPartTitles() + extra.values.sorted()
         if parts.isEmpty { return .switchNow(candidate.id) }
         return .ask(PendingSwitch(candidateID: candidate.id, candidateName: candidate.name, currentID: current.id, currentName: current.name, parts: parts))
     }
@@ -643,9 +712,20 @@ public final class RecipeStore: ObservableObject {
     public func resolveSwitch(_ choice: AutoSwitchChoice) {
         guard let p = pendingSwitch else { return }
         pendingSwitch = nil
-        guard choice != .stay, activeID == p.currentID, recipe(p.candidateID) != nil else { return }
-        if choice == .saveThenSwitch { save(p.currentID) }
+        guard choice != .stay, let current = active, current.id == p.currentID, let candidate = recipe(p.candidateID) else { return }
+        if choice == .saveThenSwitch {
+            let extra = Set(draftSectionsOverwritten(by: candidate, leaving: current).keys)
+            _ = save(current.id, including: extra)
+            if isModified(current.id) || !extra.isSubset(of: Set(active?.sections.keys.map { $0 } ?? [])) {
+                notice = "Could not save the current recipe. It is still active."
+                return
+            }
+        }
         apply(p.candidateID, automatic: true)
+    }
+
+    private func draftSectionsOverwritten(by candidate: Recipe, leaving current: Recipe) -> [String: String] {
+        additionalDraftSections?().filter { current.sections[$0.key] == nil && candidate.sections[$0.key] != nil } ?? [:]
     }
 
     /// Recipes ordered by how well they fit the connected gear (complete matches first).

@@ -132,7 +132,6 @@ struct SectionLabel: View {
 
 /// Icon tile + title for the top of each feature panel.
 struct PanelHeader<Trailing: View>: View {
-    @Environment(\.showsRecipeSaveMark) private var showsRecipeSaveMark
     var symbol: String
     var title: String
     var subtitle: String?
@@ -149,7 +148,6 @@ struct PanelHeader<Trailing: View>: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 8) {
                     Text(title).font(Brand.display(19, .semibold)).layoutPriority(1)
-                    if showsRecipeSaveMark { RecipeSaveMark() }
                 }
                 if let subtitle { Text(subtitle).font(Brand.caption).foregroundStyle(.secondary) }
             }

@@ -53,10 +53,13 @@ public struct SharedSetup: Codable, Equatable, Sendable {
     public var requirements: SharedRequirements
     /// Settings per part, keyed by the names in `parts`.
     public var settings: [String: JSONValue]
+    public var typingLanguage: SharedTypingLanguage?
 
-    public init(title: String, line: String, parts: [String], gear: [SharedGear], requirements: SharedRequirements, settings: [String: JSONValue]) {
+    public init(title: String, line: String, parts: [String], gear: [SharedGear], requirements: SharedRequirements, settings: [String: JSONValue],
+                typingLanguage: SharedTypingLanguage? = nil) {
         formatVersion = SharedSetupTable.formatVersion
         self.title = title; self.line = line; self.parts = parts; self.gear = gear; self.requirements = requirements; self.settings = settings
+        self.typingLanguage = typingLanguage
     }
 
     /// The document as JSON.

@@ -13,16 +13,10 @@ enum Shared {
     static let clipboard = ClipboardController()
     static let input = InputController()
     private static var bag = Set<AnyCancellable>()
-    static let nav: WindowNav = {
-        let nav = WindowNav()
-        nav.onPageChange = { saveBar.pageDidChange() }
-        nav.onClose = {
-            saveBar.dismissReminder()
-            saveBar.hoverConfirmation(false)
-        }
-        return nav
-    }()
+    static let nav = WindowNav()
     static let recipes = RecipeStore()
+    static let typingLanguage = TypingLanguageController()
+    static let backups = BackupController()
     static let saveBar = SaveBarController(store: recipes)
     static let presets = PresetLibrary(recipes: recipes)
     static let presetActions = PresetActions()
@@ -55,14 +49,28 @@ enum Shared {
     /// so no keystroke meant for another app can press a button here.
     static var windowIsKey: Bool { window?.isKeyWindow == true && NSApp.isActive }
 
+    static func openSection(_ page: AppPage) {
+        guard drawerWindow?.isVisible == true else { showWindow(page: page); return }
+        nav.openDrawerSection(page)
+    }
+
     static func showWindow(page: AppPage? = nil, activate: Bool = true) {
+        if SetupController.shared.hasPermissionAssistant { SetupController.shared.showPermissionAssistant(); return }
         SetupController.shared.refreshGrants()
         SetupController.shared.reconcileSetupGrants()
         let drawer = drawerFrame()          // read before activating: activating can close the drawer
         let wasVisible = window?.isVisible == true
+        let movesSpace = wasVisible && window?.isOnActiveSpace == false
+        if drawer != nil {
+            nav.drawerOpen = false
+            nav.drawerPage = nil
+            drawerWindow?.orderOut(nil)
+        }
+        if movesSpace { window?.orderOut(nil) }
         if let page { nav.page = page }
-        // Something was left unsaved when the window last closed: land on the page that changed (the reminder itself shows there).
-        else if !wasVisible, let part = recipes.takeLandingPart() { nav.page = AppPage.page(forRecipePart: part, features: features) }
+        else if !wasVisible, let part = saveBar.takeLandingPart() {
+            nav.page = AppPage.page(forRecipePart: part, features: features)
+        }
         nav.windowOpen = true
         NSApp.setActivationPolicy(.regular)
         let w: NSWindow
@@ -70,6 +78,7 @@ enum Shared {
             w = MainWindow(contentRect: NSRect(x: 0, y: 0, width: 940, height: 700), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                          backing: .buffered, defer: false)
             w.title = "Whoprrr"
+            w.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
             w.titlebarAppearsTransparent = true
             w.contentView = NSHostingView(rootView: wrap(MainWindowView()))
             w.isReleasedWhenClosed = false
@@ -78,10 +87,9 @@ enum Shared {
             if !w.setFrameUsingName("WhoprrrMainWindow") { w.center() }
             window = w
         }
-        // A window the user already has open stays where they put it; a newly shown one goes beside the drawer.
-        if !wasVisible, let drawer {
-            let screen = NSScreen.screens.first { $0.frame.intersects(drawer) } ?? NSScreen.main ?? NSScreen.screens[0]
-            w.setFrame(PanelPlacement.frame(beside: drawer, size: NSSize(width: 940, height: 700), visible: screen.visibleFrame), display: true)
+        if (!wasVisible || movesSpace), let drawer,
+           let screen = NSScreen.screens.first(where: { $0.frame.intersects(drawer) }) ?? NSScreen.main {
+            w.setFrame(PanelPlacement.frame(beside: drawer, size: w.frame.size, visible: screen.visibleFrame), display: true)
         }
         if activate {
             w.makeKeyAndOrderFront(nil)
@@ -91,13 +99,51 @@ enum Shared {
         }
     }
 
+    private static var permissionGuideActive = false
+    private static var permissionReturnToDrawer = false
+
+    /// Hide the originating surface without closing it or changing its selected page.
+    static func beginPermissionGuide() -> NSRect? {
+        let previous = drawerFrame() ?? (window?.isVisible == true ? window?.frame : nil)
+        if !permissionGuideActive { permissionReturnToDrawer = drawerFrame() != nil }
+        permissionGuideActive = true
+        nav.drawerOpen = false
+        drawerWindow?.orderOut(nil)
+        window?.orderOut(nil)
+        nav.windowOpen = false
+        NSApp.setActivationPolicy(.regular)
+        return previous
+    }
+
+    static func endPermissionGuide(returnToApp: Bool) {
+        let drawer = permissionReturnToDrawer
+        permissionGuideActive = false
+        permissionReturnToDrawer = false
+        guard returnToApp else { NSApp.setActivationPolicy(.accessory); return }
+        if drawer, let drawerWindow {
+            nav.drawerOpen = true
+            NSApp.setActivationPolicy(.accessory)
+            drawerWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        } else { showWindow(page: nav.page) }
+    }
+
     /// Makes every settings surface available to recipes, and switches recipes automatically when the connected gear changes.
     static func startRecipes() {
         for s in [audio as RecipeSurface, windows, clipboard, input, featuresSurface, displaySurface] { recipes.register(s) }
         watchSettingsForSaveBar()
-        // Anything still unsaved from last time was left on the stove: remember that, and show the mark as soon as the window opens.
-        recipes.noteLeaving()
-        saveBar.start()
+        if ProcessInfo.processInfo.environment["WHOPPER_NO_START"] != "1" {
+            typingLanguage.start()
+            recipes.onApplyRecipe = { recipe, automatic, hadActiveRecipe in
+                typingLanguage.apply(recipe, automatic: automatic, hadActiveRecipe: hadActiveRecipe)
+            }
+        }
+        saveBar.start(sections: SaveBarSurfaces.sections)
+        recipes.additionalDraftSections = {
+            saveBar.settingsDidChange()
+            return Dictionary(saveBar.editedSections.map { ($0.recipePart, $0.title) }, uniquingKeysWith: { $0 + ", " + $1 })
+        }
+        saveBar.noteLeaving()
         PicklsssController.shared.start()
         gearTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { _ in
             MainActor.assumeIsolated {
@@ -112,14 +158,13 @@ enum Shared {
         }
     }
 
-    /// Tells the save bar whenever a setting a recipe holds may have changed. Notifications are merged into one check a moment later,
-    /// and ignored while a surface is being read for a recipe (reading some of them touches their own state).
+    /// Coalesces synchronous changes and reads the resulting settings after their publishers finish.
     private static var checkPending = false
     private static func watchSettingsForSaveBar() {
         let ping: () -> Void = {
             guard !recipes.isCapturing, !checkPending else { return }
             checkPending = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { checkPending = false; saveBar.settingsDidChange() }
+            DispatchQueue.main.async { checkPending = false; saveBar.settingsDidChange() }
         }
         audio.$settings.dropFirst().sink { _ in ping() }.store(in: &bag)
         windows.$settings.dropFirst().sink { _ in ping() }.store(in: &bag)
@@ -158,6 +203,7 @@ enum Shared {
                 model.startDevices()
                 audio.startDevices()
                 setup.beginLicensedLaunch()
+                backups.openAfterActivation()
             }
         }.store(in: &bag)
     }
@@ -171,11 +217,7 @@ final class MainWindow: NSWindow {
         }
         switch event.charactersIgnoringModifiers?.lowercased() {
         case "s":
-            Shared.saveBar.settingsDidChange()
-            if case .changing = Shared.saveBar.phase {
-                Shared.saveBar.save()
-                return true
-            }
+            if Shared.saveBar.save() { return true }
         case "u":
             if let (surface, entry) = Shared.presetActions.editedPreset(on: Shared.nav.page, in: Shared.presets) {
                 Shared.presetActions.update(entry, on: surface)
@@ -193,7 +235,7 @@ final class MainWindowDelegate: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         SetupController.shared.windowClosed()
         Shared.nav.windowOpen = false
-        Shared.recipes.noteLeaving()
+        Shared.saveBar.noteLeaving()
         NSApp.setActivationPolicy(.accessory)
     }
 }
@@ -201,13 +243,23 @@ final class MainWindowDelegate: NSObject, NSWindowDelegate {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var debugWindow: NSWindow?
-    func applicationWillTerminate(_ notification: Notification) {
-        Shared.recipes.noteLeaving()          // unsaved changes are still there next time, with the reminder
-        Shared.input.shutdown()
+    private var backupRecoveryFailed = false
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        do { try BackupController.recoverInterruptedRestore() }
+        catch { backupRecoveryFailed = true }
     }
 
-    /// A `.whoprrr-setup` file opened from Finder or dropped on the app. The checker runs every time; opening is free to look at.
+    func applicationWillTerminate(_ notification: Notification) {
+        guard !backupRecoveryFailed else { return }
+        Shared.saveBar.noteLeaving()
+        // A no-start screenshot run owns no system input settings to restore.
+        if ProcessInfo.processInfo.environment["WHOPPER_NO_START"] != "1" { Shared.input.shutdown() }
+    }
+
+    /// Document files opened from Finder or dropped on the app are checked before presenting any actions.
     func application(_ application: NSApplication, open urls: [URL]) {
+        guard !backupRecoveryFailed else { return }
         for url in urls {
             if url.scheme?.lowercased() == "whoprrr" {
                 // Any web page can open this scheme. A malformed link is ignored without showing anything.
@@ -216,11 +268,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Task { await LicenseController.shared.activate(setupCode: code) }
             } else if url.isFileURL, url.pathExtension == SharedSetupFile.fileExtension {
                 PicklsssController.shared.openFile(url)
+            } else if url.isFileURL, url.pathExtension == WhopperBackup.fileExtension {
+                Shared.backups.open(url)
             }
         }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if backupRecoveryFailed {
+            let alert = NSAlert()
+            alert.messageText = "Whoprrr could not finish recovering its settings"
+            alert.informativeText = "Check that the Whopper folder in Application Support is writable and reopen Whoprrr. The pre-restore copy is in Backup Recovery."
+            alert.runModal()
+            NSApp.terminate(nil)
+            return
+        }
         NSApp.setActivationPolicy(.accessory)      // menu bar only, no Dock icon
         // WHOPPER_RENDER_ICON=/dir writes the brand artwork (iconset, icns, PNGs) and exits. See docs/brand.
         if let dir = ProcessInfo.processInfo.environment["WHOPPER_RENDER_ICON"] { BrandAssets.render(to: dir); NSApp.terminate(nil); return }
@@ -280,7 +342,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// The menu-bar panel, or the short "not activated" panel while there is no valid pass.
 struct QuickRoot: View {
     @ObservedObject private var license = LicenseController.shared
-    var body: some View { if license.isLicensed { QuickView() } else { LicenseQuickView() } }
+    @EnvironmentObject private var nav: WindowNav
+
+    var body: some View {
+        Group {
+            if !license.isLicensed {
+                LicenseQuickView()
+            } else if nav.drawerPage != nil {
+                VStack(spacing: 0) {
+                    HStack {
+                        Button { nav.returnToOverview() } label: { Label("Overview", systemImage: "chevron.left") }
+                            .buttonStyle(.brandPlain)
+                        Spacer()
+                        Menu("Sections") {
+                            Button("Recipes") { Shared.openSection(.recipes) }
+                            ForEach(Shared.features.enabledInOrder) { feature in
+                                Button(feature.shortTitle) { Shared.openSection(.feature(feature)) }
+                            }
+                            Divider()
+                            Button("Permissions") { Shared.openSection(.permissions) }
+                            Button("About") { Shared.openSection(.about) }
+                        }.menuStyle(.borderlessButton).fixedSize()
+                    }
+                    .padding(.horizontal, 20).padding(.vertical, 12)
+                    Divider()
+                    MainWindowView(inDrawer: true)
+                }
+                .frame(width: 720, height: min(720, (NSScreen.main?.visibleFrame.height ?? 800) - 70))
+            } else {
+                QuickView()
+            }
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
+        .background(DrawerWindowReader())
+        .onAppear { nav.drawerOpen = true }
+        .onDisappear {
+            nav.drawerOpen = false
+            Shared.saveBar.noteLeaving()
+        }
+    }
 }
 
 @main

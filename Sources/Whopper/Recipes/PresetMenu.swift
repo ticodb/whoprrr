@@ -6,7 +6,7 @@ final class PresetActions: ObservableObject {
     @Published var problem: String?
     var preferredControl: String?
 
-    func editedPreset(on page: AppPage, in library: PresetLibrary, includeOtherPanels: Bool = false) -> (PresetSurface, PresetEntry)? {
+    func editedPreset(on page: AppPage, in library: PresetLibrary) -> (PresetSurface, PresetEntry)? {
         let audio = Shared.audio.settings.eq.enabled ? ["audio.eq", "audio.outputfx", "audio.routing"] : ["audio.eq", "audio.routing"]
         let panel: [String]
         switch page {
@@ -22,31 +22,59 @@ final class PresetActions: ObservableObject {
             for control in ordered {
                 guard let surface = PresetSurfaces.surface(control) else { continue }
                 let groups = surface.groups(in: library)
-                if groups.edited, let entry = groups.inUse { return (surface, entry) }
+                if groups.edited, let entry = groups.inUse, !entry.isFactory { return (surface, entry) }
             }
             return nil
         }
-        if let choice = edited(panel) { return choice }
-        guard includeOtherPanels else { return nil }
-        let all = audio + ["audio.mic", "windows", "clipboard", "input"]
-        return edited(all.filter { !panel.contains($0) })
+        return edited(panel)
     }
 
     func apply(_ entry: PresetEntry, on surface: PresetSurface) {
         guard surface.apply(entry.data) else { problem = "Could not apply that preset."; return }
         if !Shared.presets.select(entry.id, at: surface.location) { couldNotSave() }
+        Shared.saveBar.didChoosePreset(in: surface.key) {
+            SaveBarSurfaces.mergePreset(surface, from: $0, into: $1, applying: entry)
+        }
     }
 
     @discardableResult
     func update(_ entry: PresetEntry, on surface: PresetSurface) -> Bool {
-        guard let data = surface.captureUpdate(for: entry),
-              let update = Shared.presets.update(entry, with: data, at: surface.location,
-                                                 recipePart: surface.recipePart, recipes: Shared.recipes) else {
-            couldNotSave()
-            return false
+        guard !entry.isFactory else { return false }
+        let inUse = surface.groups(in: Shared.presets).inUse?.id == entry.id
+        let merge = savePart(of: surface)
+        let saved = Shared.saveBar.savePreset(entry.name, in: inUse ? surface.key : nil, copy: merge) {
+            surface.sync()
+            guard let data = surface.capture(),
+                  let update = Shared.presets.update(entry, with: data, at: surface.location,
+                                                     recipePart: surface.recipePart, recipes: Shared.recipes,
+                                                     mergeRecipePart: merge) else {
+                return nil
+            }
+            return { Shared.presets.undo(update, recipes: Shared.recipes, applyRecipe: false) }
         }
-        Shared.saveBar.showPresetUpdate(update, in: Shared.presets)
-        return true
+        if !saved { couldNotSave() }
+        return saved
+    }
+
+    @discardableResult
+    func create(_ name: String, on surface: PresetSurface) -> Bool {
+        let merge = savePart(of: surface)
+        let saved = Shared.saveBar.savePreset(name, in: surface.key, copy: merge) {
+            surface.sync()
+            guard let data = surface.capture(),
+                  let creation = Shared.presets.create(name, data: data, at: surface.location,
+                                                       recipePart: surface.recipePart, recipes: Shared.recipes,
+                                                       mergeRecipePart: merge) else {
+                return nil
+            }
+            return { Shared.presets.undoCreation(creation, recipes: Shared.recipes) }
+        }
+        if !saved { couldNotSave() }
+        return saved
+    }
+
+    private func savePart(of surface: PresetSurface) -> (Data, Data) -> Data? {
+        { SaveBarSurfaces.mergePreset(surface, from: $0, into: $1) }
     }
 
     func couldNotSave() {
@@ -67,7 +95,7 @@ struct PresetMenu: View {
 
     var body: some View {
         let groups = surface.groups(in: library)
-        let title = groups.inUse.map { $0.name + (groups.edited ? " · edited" : "") } ?? "Presets"
+        let title = groups.inUse.map { "Presets · " + $0.name + (groups.edited ? " · edited" : "") } ?? "Presets"
         Button {
             actions.preferredControl = surface.key
             picking.toggle()
@@ -106,11 +134,7 @@ struct PresetMenu: View {
             Task { @MainActor in asking = true }
             return
         }
-        surface.sync()
-        guard let data = surface.capture(), library.saveNew(cleanName, data: data, at: surface.location) else {
-            actions.couldNotSave()
-            return
-        }
+        actions.create(cleanName, on: surface)
     }
 }
 
@@ -147,27 +171,21 @@ struct PresetPickerContents: View {
 
     private var list: some View {
         VStack(alignment: .leading, spacing: 3) {
-            if let entry = groups.inUse, groups.edited {
+            heading("Built-in")
+            if groups.builtIn.isEmpty { empty("No built-in presets") }
+            ForEach(groups.builtIn) { choice($0, inUse: $0.id == groups.inUse?.id) }
+            heading("Yours")
+            if groups.yours.isEmpty { empty("None yet") }
+            ForEach(groups.yours) { choice($0, inUse: $0.id == groups.inUse?.id) }
+            Divider().padding(.vertical, 4)
+            if let entry = groups.inUse, groups.edited, !entry.isFactory {
                 PresetMenuItem("Update “\(entry.name)”", detail: "⌘U", emphasized: true) {
                     close()
                     actions.update(entry, on: surface)
                 }
                 .keyboardShortcut("u", modifiers: .command)
-                PresetMenuItem("Put “\(entry.name)” back") { close(); actions.apply(entry, on: surface) }
-                Divider().padding(.vertical, 4)
             }
-            if let entry = groups.inUse {
-                heading("In use on \(surface.locationName)")
-                choice(entry, inUse: true)
-            }
-            heading("Yours")
-            if groups.selectableYours.isEmpty { empty("No other presets") }
-            ForEach(groups.selectableYours) { choice($0) }
-            heading("Built in")
-            if groups.selectableBuiltIn.isEmpty { empty("No other built-in presets") }
-            ForEach(groups.selectableBuiltIn) { choice($0) }
-            Divider().padding(.vertical, 4)
-            PresetMenuItem("Save as new preset…") { close(); saveNew() }
+            PresetMenuItem("Save as new…") { close(); saveNew() }
             PresetMenuItem("Manage presets…") { close(); manage() }
         }
         .padding(10)
@@ -184,9 +202,9 @@ struct PresetPickerContents: View {
     }
 
     private func choice(_ entry: PresetEntry, inUse: Bool = false) -> some View {
-        PresetMenuItem(entry.name, detail: entry.changed ? "Changed by you" : nil, checked: inUse) {
+        PresetMenuItem(entry.name + (inUse && groups.edited ? " · edited" : ""), checked: inUse) {
             close()
-            if !inUse || !groups.edited { actions.apply(entry, on: surface) }
+            actions.apply(entry, on: surface)
         }
     }
 }

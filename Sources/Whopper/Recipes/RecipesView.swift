@@ -12,6 +12,7 @@ struct RecipesView: View {
     @State private var renaming: Recipe?
     @State private var deleting: Recipe?
     @State private var flagging: Recipe?
+    @ObservedObject private var backups = Shared.backups
     @ObservedObject private var picklsss = PicklsssController.shared
     private let timer = Timer.publish(every: 3, on: .main, in: .common).autoconnect()
 
@@ -20,6 +21,28 @@ struct RecipesView: View {
             PanelHeader("Recipes", symbol: "fork.knife", subtitle: "Switch your whole setup in one click") {
                 Button("Scan my gear") { nav.page = .welcome }.buttonStyle(.brandQuiet)
                 Button("New recipe") { creating = true }.buttonStyle(.brand)
+            }
+            HStack(spacing: 8) {
+                Button("Back up everything…") { backups.prepareExport() }.buttonStyle(.brandQuiet)
+                Button("Restore backup…") { backups.chooseFile() }.buttonStyle(.brandQuiet)
+                Menu("Share…") {
+                    ForEach(recipes.recipes) { recipe in
+                        Menu(recipe.name) {
+                            Button("Send as a file…") { picklsss.sharing = ShareSession(controller: picklsss, recipe: recipe, mode: .file) }
+                            Button("Share as a picklsss…") { picklsss.sharing = ShareSession(controller: picklsss, recipe: recipe, mode: .share) }
+                        }
+                    }
+                }
+                .menuStyle(.borderlessButton).fixedSize().disabled(recipes.recipes.isEmpty)
+            }
+            if let status = backups.status {
+                HStack {
+                    Label(status, systemImage: "checkmark.circle").font(Brand.caption)
+                    Spacer()
+                    Button { backups.status = nil } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.plain).accessibilityLabel("Dismiss backup message")
+                }
+                .foregroundStyle(StatusChip.Tone.good.text)
             }
             if let n = recipes.notice {
                 HStack(spacing: 8) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green); Text(n).font(Brand.subheadline); Spacer()
@@ -64,7 +87,6 @@ struct RecipesView: View {
     private func card(_ r: Recipe) -> some View {
         let g = r.gear(connected: connected)
         let isActive = recipes.activeID == r.id
-        let modified = recipes.isModified(r.id)
         return BrandCard {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: r.symbol).font(.system(size: 17, weight: .medium)).frame(width: 40, height: 40)
@@ -83,8 +105,7 @@ struct RecipesView: View {
                 Spacer(minLength: 6)
                 VStack(alignment: .trailing, spacing: 8) {
                     HStack(spacing: 6) {
-                        Button(isActive && !modified ? "Applied" : isActive ? "Reapply" : "Apply") { recipes.apply(r.id) }
-                            .buttonStyle(.brand).disabled(isActive && !modified)
+                        Button(isActive ? "Reapply" : "Apply") { recipes.apply(r.id) }.buttonStyle(.brand)
                         Menu {
                             if let prev = r.previous {
                                 Button(RecipeWording.goBackTitle(prev, now: Date())) { goBack(r) }
@@ -113,6 +134,8 @@ struct RecipesView: View {
                         .accessibilityLabel("Switch to \(r.name) automatically")
                 }
             }
+            Divider()
+            RecipeTypingLanguageRow(recipe: r)
             if !g.missing.isEmpty && !r.devices.isEmpty {
                 Text(g.present.isEmpty ? "None of this gear is connected." : "\(g.missing.count) of \(r.devices.count) not connected.")
                     .font(Brand.caption).foregroundStyle(.orange)
