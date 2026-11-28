@@ -16,6 +16,7 @@ final class SetupController: ObservableObject {
     @Published private(set) var note: String?
     @Published private(set) var checking = false
     @Published private(set) var tasteStarted = false
+    @Published private(set) var diagnosticTargets: Set<Feature> = []
     @Published private(set) var audioCheckRunning = false
 
     private let store = JSONStore<SetupProgress>(name: "onboarding")
@@ -27,6 +28,8 @@ final class SetupController: ObservableObject {
     private var audioCheckTimeout: Task<Void, Never>?
     private var beganLicensedLaunch = false
     private var run: Task<Void, Never>?
+    private var tasteWork: Task<Void, Never>?
+    private var checkRun = SetupCheckRun()
     private static let legacyKey = "gg.tico.whoprrr.welcomed"
 
     init() {
@@ -38,7 +41,7 @@ final class SetupController: ObservableObject {
 
     var step: SetupStep { LicenseController.shared.isLicensed ? progress.step : .key }
     var showsSetup: Bool { step != .complete || renewalVisible }
-    var canAutoSwitch: Bool { progress.step == .complete && !auditing && progress.renewal.isEmpty && !hasPermissionAssistant }
+    var canAutoSwitch: Bool { progress.step == .complete && !auditing && progress.renewal.isEmpty && !hasPermissionAssistant && !checking }
 
     var plan: StarterPlan? { progress.scan.map { StarterRecipes.plan(for: $0, firstSetup: true) } }
     var proposed: [Feature: Set<Permission>] {
@@ -155,6 +158,7 @@ final class SetupController: ObservableObject {
             progress.askingAgain = nil
             progress.renewedGrants.insert(.inputMonitoring)
         }
+        reconcileRenewedFeatures()
     }
 
     func reconcileSetupGrants() {
@@ -220,7 +224,7 @@ final class SetupController: ObservableObject {
 
     func windowClosed() {
         stopGuide()
-        if !auditing { run?.cancel() }
+        cancelTaste()
     }
 
     var permissionFlow: PermissionFlow? { progress.permissionFlow }
@@ -361,11 +365,15 @@ final class SetupController: ObservableObject {
 
     func finishPermissionAssistant() {
         guard permissionFlow?.stage == .ready else { return }
+        reconcileRenewedFeatures()
         let next = nextAssistantGrant
         progress.permissionFlow = nil
         stopGuide()
         if let next { beginCurrentGrant(next) }
-        else { Shared.endPermissionGuide(returnToApp: true) }
+        else {
+            if progress.step != .complete, currentGrant == nil { progress.step = .orderUp }
+            Shared.endPermissionGuide(returnToApp: true)
+        }
     }
 
     func suspendPermissionAssistant(returnToApp: Bool = true) {
@@ -405,39 +413,66 @@ final class SetupController: ObservableObject {
         }
     }
 
+    private func reconcileRenewedFeatures() {
+        guard progress.step == .complete, progress.renewalStarted else { return }
+        let needs = requirements(for: progress.renewal)
+        let snapshot = states
+        let proven = progress.grantedByTest
+        let waitingForRestart = inputRestartRequested
+        var next = progress
+        let resumed = next.resumeRenewedFeatures(requirements: needs) { grant in
+            if grant == .inputMonitoring && waitingForRestart { return false }
+            return snapshot[grant] == .granted || (snapshot[grant] == .unknown && proven.contains(grant))
+        }
+        if !resumed.isEmpty || next.renewalStarted != progress.renewalStarted { progress = next }
+        if next.renewal.isEmpty, !tasteStarted { renewalVisible = false }
+    }
+
+    func finishPermissionStep() {
+        refreshGrants()
+        guard currentGrant == nil else { return }
+        if progress.step == .complete { finishTaste() }
+        else { progress.step = .orderUp }
+    }
+
     func showTaste() {
         if progress.step != .complete { progress.step = .taste }
+        else { renewalVisible = true }
+        diagnosticTargets = progress.step == .complete ? Shared.features.enabled : activeTargets
+        tasteStarted = true
         runTaste()
     }
 
+    func cancelTaste() {
+        checkRun.cancel()
+        tasteWork?.cancel()
+        tasteWork = nil
+        checking = false
+        trying = nil
+    }
+
     func runTaste(force: Bool = false) {
-        guard !checking, LicenseController.shared.isLicensed,
-              ProcessInfo.processInfo.environment["WHOPPER_NO_START"] != "1" else { return }
+        guard LicenseController.shared.isLicensed,
+              ProcessInfo.processInfo.environment["WHOPPER_NO_START"] != "1",
+              let id = checkRun.begin() else { return }
         stopGuide()
         checking = true
         tasteStarted = true
-        run = Task {
-            let targets = activeTargets
+        tasteWork = Task {
+            defer {
+                if checkRun.finish(id) { checking = false; trying = nil; tasteWork = nil }
+            }
+            let targets = diagnosticTargets
             let needs = requirements(for: targets)
             for feature in Feature.allCases where targets.contains(feature) {
-                if Task.isCancelled { break }
+                guard !Task.isCancelled, checkRun.active == id else { return }
                 if !force, progress.findings[feature]?.result == .works, progress.parked[feature] == nil { continue }
                 trying = feature
                 let result = await taste.tryFeature(feature, grants: needs[feature] ?? [], skipped: progress.skipped, mode: .setup)
-                guard !Task.isCancelled else { break }
-                progress.findings[feature] = result
-                if result.result == .works { progress.parked[feature] = nil }
-                else if result.result == .parked || progress.step == .complete { progress.parked[feature] = result }
+                guard !Task.isCancelled, checkRun.active == id else { return }
+                refreshGrants()
+                progress.recordDiagnostic(result, for: feature, requirements: needs[feature] ?? [], states: states)
             }
-            trying = nil
-            checking = false
-        }
-    }
-
-    var canFinishTaste: Bool {
-        !checking && activeTargets.allSatisfy { f in
-            if progress.parked[f]?.result == .parked { return true }
-            return progress.findings[f]?.result == .works
         }
     }
 
@@ -492,7 +527,7 @@ final class SetupController: ObservableObject {
         progress.skipped = []
         refreshGrants()
         if let grant = currentGrant { beginCurrentGrant(grant) }
-        else { showTaste() }
+        else { finishPermissionStep() }
     }
 
     func canReset(_ permission: Permission) -> Bool { permission.resetService != nil && progress.resetAttempts[permission, default: 0] < 2 }
@@ -504,6 +539,8 @@ final class SetupController: ObservableObject {
     }
 
     func finishTaste() {
+        cancelTaste()
+        tasteStarted = false
         if progress.step == .complete {
             progress.renewal = []
             progress.renewalStarted = false

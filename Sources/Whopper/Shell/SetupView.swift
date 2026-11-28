@@ -58,7 +58,7 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) { LogoMark(size: 40); Wordmark(size: 24) }.padding(.bottom, 14)
             SectionLabel(setup.renewalVisible ? "Finish setup" : "Setup").padding(.leading, 8)
-            let current = setup.renewalVisible ? (setup.progress.renewalStarted && setup.currentGrant == nil ? SetupStep.taste : .permissions) : setup.step
+            let current = setup.renewalVisible ? (setup.tasteStarted ? SetupStep.taste : .permissions) : setup.step
             ForEach(SetupStep.allCases.prefix(5), id: \.self) { step in
                 HStack(spacing: 10) {
                     let parked = step == .permissions && current.rawValue > step.rawValue && !setup.parkedFeatures.isEmpty
@@ -151,9 +151,12 @@ struct SetupView: View {
                 Button("Not now") { skipGrant = grant }.buttonStyle(.brandPlain)
             }.disabled(setup.working)
         } else {
-            PanelHeader("Ready for the taste test", symbol: "lock.shield")
+            PanelHeader("Permissions are ready", symbol: "lock.shield", subtitle: "Your setup can continue. Checks are optional.")
             grantRows
-            Button("Start taste test") { setup.showTaste() }.buttonStyle(.brand).disabled(setup.working)
+            HStack {
+                Button("Continue") { setup.finishPermissionStep() }.buttonStyle(.brand).disabled(setup.working)
+                Button("Run optional checks") { setup.showTaste() }.buttonStyle(.brandPlain).disabled(setup.working || setup.checking)
+            }
         }
     }
 
@@ -179,9 +182,9 @@ struct SetupView: View {
     }
 
     @ViewBuilder private var taste: some View {
-        PanelHeader("Taste test", symbol: "checkmark.seal", subtitle: "Whoprrr tries each feature once, for real")
-        tasteRows(setup.activeTargets)
-        ForEach(Feature.allCases.filter { setup.activeTargets.contains($0) }) { feature in
+        PanelHeader("Optional checks", symbol: "checkmark.seal", subtitle: "Diagnostic results won’t block you from using Whoprrr")
+        tasteRows(setup.diagnosticTargets)
+        ForEach(Feature.allCases.filter { setup.diagnosticTargets.contains($0) }) { feature in
             if let result = setup.progress.findings[feature], result.result != .works, result.result != .parked,
                setup.progress.parked[feature]?.result != .parked {
                 BrandCard {
@@ -189,7 +192,7 @@ struct SetupView: View {
                     HStack {
                         if let grant = setup.ordered(result.grants).first, result.result == .needsCheck {
                             Button("Check \(grant.title)") { setup.retry(grant, reset: false) }.buttonStyle(.brand)
-                        } else if let grant = setup.ordered(result.grants).first, setup.canReset(grant) {
+                        } else if let grant = setup.ordered(result.grants).first, !setup.isGranted(grant), setup.canReset(grant) {
                             Button("Repair permission…") { setup.retry(grant, reset: true) }.buttonStyle(.brand)
                         } else {
                             Button("Try once more") { setup.runTaste(force: true) }.buttonStyle(.brandQuiet)
@@ -200,10 +203,11 @@ struct SetupView: View {
                 }.disabled(setup.checking || setup.working)
             }
         }
-        if setup.canFinishTaste {
-            Button("Finish") { setup.finishTaste() }.buttonStyle(.brand)
-        } else if !setup.checking && setup.activeTargets.contains(where: { setup.progress.findings[$0] == nil }) {
-            Button("Continue taste test") { setup.runTaste() }.buttonStyle(.brand)
+        HStack {
+            Button(setup.checking ? "Stop checks and continue" : "Continue") { setup.finishTaste() }.buttonStyle(.brand)
+            if !setup.checking && setup.diagnosticTargets.contains(where: { setup.progress.findings[$0] == nil }) {
+                Button("Run checks") { setup.runTaste() }.buttonStyle(.brandPlain)
+            }
         }
     }
 
@@ -223,7 +227,12 @@ struct SetupView: View {
 
     @ViewBuilder private var orderUp: some View {
         PanelHeader("Order up", symbol: "fork.knife", subtitle: "\(setup.progress.recipeName ?? "Your recipe") is on, and Whoprrr lives in the menu bar")
-        tasteRows(setup.activeTargets)
+        BrandCard {
+            ForEach(Feature.allCases.filter(setup.activeTargets.contains)) { feature in
+                let paused = setup.progress.parked[feature] != nil
+                setupRow(feature.shortTitle, detail: nil, chip: paused ? "Paused" : "On", tone: paused ? .warn : .good)
+            }
+        }
         if !setup.parkedFeatures.isEmpty {
             Text("Finish setup any time from the menu bar or the parked feature’s page.").font(Brand.caption).foregroundStyle(.secondary)
         }
@@ -232,13 +241,15 @@ struct SetupView: View {
         } else {
             HStack {
                 Button("Open Recipes") { setup.finishSetup() }.buttonStyle(.brand)
+                Button("Run optional checks") { setup.showTaste() }.buttonStyle(.brandPlain)
                 Button("Help the next person with this gear?") { sharing = true }.buttonStyle(.brandPlain)
             }
         }
     }
 
     @ViewBuilder private var renewal: some View {
-        if !setup.progress.renewalStarted {
+        if setup.tasteStarted { taste }
+        else if !setup.progress.renewalStarted {
             let needs = setup.grants
             let requiresCheck = setup.activeTargets.contains { setup.progress.parked[$0]?.result == .needsCheck }
             PanelHeader(needs.isEmpty ? "Finish setup" : requiresCheck ? "Check permissions after the update" : "Renew \(needs.count) \(needs.count == 1 ? "grant" : "grants")",
@@ -256,8 +267,7 @@ struct SetupView: View {
                 Button(needs.isEmpty || requiresCheck ? "Continue" : "Renew") { setup.renew() }.buttonStyle(.brand)
                 Button("Later") { setup.leaveRenewal() }.buttonStyle(.brandPlain)
             }
-        } else if setup.currentGrant != nil || !setup.tasteStarted { grants }
-        else { taste }
+        } else { grants }
     }
 
     private func setupRow(_ title: String, detail: String?, chip: String, tone: StatusChip.Tone) -> some View {

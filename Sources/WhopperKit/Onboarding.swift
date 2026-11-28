@@ -9,7 +9,7 @@ public enum SetupStep: Int, CaseIterable, Codable, Sendable {
         case .gear: "Your gear"
         case .recipe: "Recipe"
         case .permissions: "Permissions"
-        case .taste: "Taste test"
+        case .taste: "Optional checks"
         case .orderUp, .complete: "Order up"
         }
     }
@@ -154,6 +154,47 @@ public struct SetupProgress: Codable, Sendable {
         return order.first { permission in
             guard !skipped.contains(permission), !isGranted(permission) || isStale(permission, targets: targets) else { return false }
             return requirements.values.contains { $0.contains(permission) && $0.isDisjoint(with: skipped) }
+        }
+    }
+
+    /// A deliberate renewal is complete when the affected grants have been renewed
+    /// and all of the feature's current requirements are available. A synthetic
+    /// diagnostic is not a prerequisite for putting the feature back to work.
+    @discardableResult
+    public mutating func resumeRenewedFeatures(requirements: [Feature: Set<Permission>],
+                                               isGranted: (Permission) -> Bool) -> Set<Feature> {
+        guard step == .complete, renewalStarted else { return [] }
+        var resumed = Set<Feature>()
+        for feature in renewal {
+            guard let finding = parked[feature], let needed = requirements[feature],
+                  finding.result == .parked || (!finding.grants.isEmpty && finding.grants.isSubset(of: renewedGrants)),
+                  needed.isDisjoint(with: skipped), needed.allSatisfy(isGranted) else { continue }
+            parked[feature] = nil
+            findings[feature] = TasteFinding(.needsCheck, detail: "Permissions are on. You can run an optional check from Permissions.")
+            resumed.insert(feature)
+        }
+        renewal.subtract(resumed)
+        if renewal.isEmpty {
+            renewalStarted = false
+            renewedGrants = []
+            skipped = []
+            askingAgain = nil
+        }
+        return resumed
+    }
+
+    /// Diagnostics report their result without turning a failed synthetic probe
+    /// into a permission failure. Missing grants and explicit skips still pause.
+    public mutating func recordDiagnostic(_ finding: TasteFinding, for feature: Feature,
+                                          requirements: Set<Permission>, states: [Permission: PermissionStatus]) {
+        findings[feature] = finding
+        let blocked = Set(requirements.filter { TasteTest.definitelyBlocked($0, states[$0] ?? .unknown) })
+        if !blocked.isEmpty {
+            parked[feature] = TasteFinding(.parked, grants: blocked, detail: "Waiting for " + TasteTest.names(blocked) + ". Your settings are kept.")
+        } else if finding.result == .parked {
+            parked[feature] = finding
+        } else if finding.result == .works {
+            parked[feature] = nil
         }
     }
 

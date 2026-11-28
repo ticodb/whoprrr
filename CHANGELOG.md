@@ -4,6 +4,18 @@ All notable changes to Whoprrr. Versions follow [Semantic Versioning](https://se
 
 ## Unreleased
 
+## 0.9.0 beta 10: setup that lets you go
+
+Released 2026-11-27.
+
+### Fixed
+- **Renewed permissions put features back to work.** Once the grants a paused feature needs are renewed and on, Windows, Keys and the rest resume without passing a test first.
+- **The taste test is now optional checks.** A check that can't confirm a feature no longer pauses it while its permissions are on; only a real denial or a skipped grant does. Closing the window mid-check no longer leaves the checks stuck, and you can stop them and continue at any time.
+- **Setup in the menu-bar drawer** shows a compact summary instead of a clipped copy of the setup window.
+
+### Beta notes
+- Public beta builds remain ad-hoc signed. macOS can require permissions to be renewed after an update.
+
 ## 0.9.0 beta 9: your setup, close at hand
 
 Released 2026-11-27.

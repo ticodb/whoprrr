@@ -13,7 +13,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 VERSION="$(cat VERSION)"
-LABEL="${RELEASE_LABEL-beta 9}"
+LABEL="${RELEASE_LABEL-beta 10}"
 TAG="${VERSION}${LABEL:+-${LABEL// /}}"
 UPDATES_DIR="${UPDATES_DIR:-$HOME/whoprrr-updates}"
 # The site folder can have unreleased site work checked out. This script writes into it and the next step deploys it,
