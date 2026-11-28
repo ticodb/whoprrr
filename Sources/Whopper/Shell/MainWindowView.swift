@@ -22,7 +22,9 @@ struct MainWindowView: View {
     @ObservedObject private var picklsss = PicklsssController.shared
 
     var body: some View {
-        if license.isLicensed && !setup.showsSetup { app } else { SetupView() }
+        if license.isLicensed && !setup.showsSetup { app }
+        else if inDrawer { SetupDrawerSummary() }
+        else { SetupView() }
     }
 
     private var app: some View {

@@ -15,6 +15,8 @@ struct PermissionsView: View {
             ForEach(listedPermissions) { p in
                 BrandCard { row(p) }
             }
+            Button("Run optional checks…") { setup.showTaste() }.buttonStyle(.brandPlain)
+                .disabled(setup.checking || setup.working)
             Text("Whoprrr asks only for what your installed features need. Each grant or repair starts with an explanation, then one step at a time.")
                 .font(Brand.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
